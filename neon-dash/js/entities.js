@@ -12,17 +12,17 @@
  */
 import * as THREE from '../../vendor/three.module.min.js';
 import { COLOR, CFG, LANES, POWERUPS } from './config.js';
-import { makeGlowTexture } from './utils.js';
+import { makeGlowTexture, loftGeometry, tubeGeometry, bladeGeometry } from './utils.js';
 
 /* ------------------------------------------------------------- obstacle defs */
 
 export const OBSTACLE = {
   // jump over it
-  low: { halfDepth: 0.42, yBottom: 0.0, yTop: 1.15, color: COLOR.cyan },
+  low: { halfDepth: 0.30, yBottom: 0.0, yTop: 1.04, color: COLOR.cyan },
   // slide under it
-  high: { halfDepth: 0.42, yBottom: 1.35, yTop: 2.6, color: COLOR.gold },
+  high: { halfDepth: 0.30, yBottom: 1.36, yTop: 2.60, color: COLOR.gold },
   // full-height pillar: change lane
-  pillar: { halfDepth: 0.4, yBottom: 0.0, yTop: 3.9, color: COLOR.magenta },
+  pillar: { halfDepth: 0.34, yBottom: 0.0, yTop: 3.9, color: COLOR.magenta },
 };
 
 /* --------------------------------------------------------------------- assets */
@@ -45,23 +45,40 @@ export class Assets {
     const M = this.mat;
 
     /* ---------------------------------------------------------- shared bodies */
-    G.lowBody = new THREE.BoxGeometry(2.05, 1.15, 0.42);
-    G.lowLip = new THREE.BoxGeometry(2.12, 0.14, 0.5);
+    // Solid bodies are chamfered extrusions: a barrier must still read as an
+    // impassable mass, but a plain box looks like a placeholder. Extruding the
+    // front silhouette with a bevel gives solidity AND machined edges.
+    G.lowBody = bladeGeometry(
+      [[-0.94, 0.00], [0.94, 0.00], [0.94, 0.86], [0.78, 1.04], [-0.78, 1.04], [-0.94, 0.86]],
+      0.40, 0.028);
 
-    G.highBeam = new THREE.BoxGeometry(2.05, 1.25, 0.42);
-    G.highLip = new THREE.BoxGeometry(2.12, 0.14, 0.5);
+    G.highBody = bladeGeometry(
+      [[-0.94, 1.36], [0.94, 1.36], [0.94, 2.36], [0.76, 2.60], [-0.76, 2.60], [-0.94, 2.36]],
+      0.40, 0.028);
 
-    G.chevron = new THREE.BoxGeometry(0.3, 0.62, 0.13);
-    G.pillarBody = new THREE.BoxGeometry(1.5, 3.9, 0.72);
-    G.pillarStrip = new THREE.BoxGeometry(0.09, 3.7, 0.09);
-    G.pillarCap = new THREE.BoxGeometry(1.62, 0.16, 0.84);
-    G.lowGlow = new THREE.PlaneGeometry(4.6, 3.0);
-    G.highGlow = new THREE.PlaneGeometry(4.6, 3.4);
-    G.pillarGlow = new THREE.PlaneGeometry(3.6, 6.4);
+    G.pillarBody = bladeGeometry(
+      [[-0.66, 0.00], [0.66, 0.00], [0.60, 2.40], [0.50, 3.62], [0.32, 3.88],
+       [-0.32, 3.88], [-0.50, 3.62], [-0.60, 2.40]],
+      0.62, 0.032);
+
+    G.lowRail = new THREE.BoxGeometry(1.86, 0.060, 0.22);
+    G.highSill = new THREE.BoxGeometry(1.86, 0.065, 0.25);
+    G.chevronRow = bladeGeometry([-0.52, 0, 0.52].map((dx) =>
+      [[dx, 0], [dx + 0.30, 0], [dx + 0.16, 0.20], [dx, 0.26], [dx - 0.16, 0.20]]), 0.075, 0.018);
+    G.coreGeo = new THREE.OctahedronGeometry(0.22, 0);
+    G.pillarCap = bladeGeometry([[-0.34, 0], [0.34, 0], [0.20, 0.13], [0, 0.18], [-0.20, 0.13]], 0.66, 0.034);
+    G.pillarStrip = tubeGeometry([
+      new THREE.Vector3(0.62, 0.10, 0.30),
+      new THREE.Vector3(0.54, 1.90, 0.26),
+      new THREE.Vector3(0.34, 3.80, 0.18),
+    ], 0.026, 14, 6);
+    G.glowLow = new THREE.PlaneGeometry(3.6, 2.4);
+    G.glowHigh = new THREE.PlaneGeometry(3.6, 3.0);
+    G.glowPillar = new THREE.PlaneGeometry(2.8, 5.4);
     G.pillarCore = new THREE.OctahedronGeometry(0.42, 0);
 
-    G.coin = new THREE.TorusGeometry(0.34, 0.105, 8, 22);
-    G.coinCore = new THREE.CircleGeometry(0.22, 16);
+    G.coinDisc = new THREE.CylinderGeometry(0.35, 0.35, 0.085, 22);
+    G.coinRim = new THREE.TorusGeometry(0.35, 0.055, 6, 22);
 
     G.powerCore = new THREE.OctahedronGeometry(0.36, 0);
     G.powerShell = new THREE.IcosahedronGeometry(0.62, 0);
@@ -84,7 +101,7 @@ export class Assets {
     M.lowLip = new THREE.MeshBasicMaterial({ color: COLOR.cyan });
     M.highLip = new THREE.MeshBasicMaterial({ color: COLOR.gold });
     M.pillarCore = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
-    M.pillarStrip = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
+    M.pillarCap = new THREE.MeshBasicMaterial({ color: 0xffd0f4 });
     M.pillarCap = new THREE.MeshBasicMaterial({ color: 0xffd0f4 });
 
     const glowMat = (color, opacity) => new THREE.MeshBasicMaterial({
@@ -96,19 +113,19 @@ export class Assets {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    M.lowGlow = glowMat(COLOR.cyan, 0.42);
-    M.highGlow = glowMat(COLOR.gold, 0.42);
-    M.pillarGlow = glowMat(COLOR.magenta, 0.5);
+    M.glowLow = glowMat(COLOR.cyan, 0.42);
+    M.glowHigh = glowMat(COLOR.gold, 0.42);
+    M.glowPillar = glowMat(COLOR.magenta, 0.5);
 
     M.edgeCyan = new THREE.LineBasicMaterial({ color: COLOR.cyan, transparent: true, opacity: 0.9 });
     M.edgeGold = new THREE.LineBasicMaterial({ color: COLOR.gold, transparent: true, opacity: 0.9 });
     M.edgeMagenta = new THREE.LineBasicMaterial({ color: COLOR.magenta, transparent: true, opacity: 0.95 });
 
-    M.coin = new THREE.MeshBasicMaterial({ color: COLOR.gold });
-    M.coinCore = new THREE.MeshBasicMaterial({
-      color: 0xfff2b0, transparent: true, opacity: 0.4,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    M.coinDisc = new THREE.MeshStandardMaterial({
+      color: 0xffd447, roughness: 0.25, metalness: 1.0,
+      emissive: COLOR.gold, emissiveIntensity: 0.85,
     });
+    M.coinRim = new THREE.MeshBasicMaterial({ color: 0xfff3c4 });
 
     M.shell = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.75 });
     M.ring = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
@@ -136,72 +153,58 @@ export class Assets {
     const g = new THREE.Group();
 
     if (kind === 'low') {
-      // a wide low barrier with a bright top rail and upward chevrons
-      const body = new THREE.Mesh(this.geo.lowBody, this.mat.lowBody);
-      body.position.y = 0.575;
-      const lip = new THREE.Mesh(this.geo.lowLip, this.mat.lowLip);
-      lip.position.y = 1.15;
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geo.lowBody), this.mat.edgeCyan);
-      edges.position.y = 0.575;
-      g.add(body, lip, edges);
+      g.add(new THREE.Mesh(this.geo.lowBody, this.mat.lowBody));
 
-      for (const sx of [-0.62, 0, 0.62]) {
-        const bar = new THREE.Mesh(this.geo.chevron, this.mat.lowLip);
-        bar.position.set(sx, 0.48, 0.24);
-        bar.rotation.z = sx === 0 ? 0 : (sx > 0 ? -0.85 : 0.85);
-        g.add(bar);
-      }
+      const rail = new THREE.Mesh(this.geo.lowRail, this.mat.lowLip);
+      rail.position.set(0, 1.06, 0);
+      g.add(rail);
 
-      const glow = new THREE.Mesh(this.geo.lowGlow, this.mat.lowGlow);
-      glow.position.set(0, 0.8, -0.34);
+      const ch = new THREE.Mesh(this.geo.chevronRow, this.mat.lowLip);
+      ch.position.set(0, 0.42, 0.22);
+      g.add(ch);
+
+      const glow = new THREE.Mesh(this.geo.glowLow, this.mat.glowLow);
+      glow.position.set(0, 0.62, -0.30);
       glow.renderOrder = 1;
       g.add(glow);
 
     } else if (kind === 'high') {
-      // an overhead gate with a bright underside and downward chevrons
-      const beam = new THREE.Mesh(this.geo.highBeam, this.mat.highBody);
-      beam.position.y = 1.975;
-      const lip = new THREE.Mesh(this.geo.highLip, this.mat.highLip);
-      lip.position.y = 1.35;
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geo.highBeam), this.mat.edgeGold);
-      edges.position.y = 1.975;
-      g.add(beam, lip, edges);
+      g.add(new THREE.Mesh(this.geo.highBody, this.mat.highBody));
 
-      for (const sx of [-0.62, 0, 0.62]) {
-        const bar = new THREE.Mesh(this.geo.chevron, this.mat.highLip);
-        bar.position.set(sx, 1.62, 0.24);
-        bar.rotation.z = sx === 0 ? 0 : (sx > 0 ? 0.85 : -0.85);
-        g.add(bar);
-      }
+      const sill = new THREE.Mesh(this.geo.highSill, this.mat.highLip);
+      sill.position.set(0, 1.40, 0);
+      g.add(sill);
 
-      const glow = new THREE.Mesh(this.geo.highGlow, this.mat.highGlow);
-      glow.position.set(0, 1.9, -0.34);
+      const ch = new THREE.Mesh(this.geo.chevronRow, this.mat.highLip);
+      ch.position.set(0, 1.62, 0.22);
+      ch.rotation.z = Math.PI;
+      g.add(ch);
+
+      const glow = new THREE.Mesh(this.geo.glowHigh, this.mat.glowHigh);
+      glow.position.set(0, 1.98, -0.30);
       glow.renderOrder = 1;
       g.add(glow);
 
     } else {
-      // a slim pillar with corner strips and a spinning core
-      const body = new THREE.Mesh(this.geo.pillarBody, this.mat.pillarBody);
-      body.position.y = 1.95;
-      const cap = new THREE.Mesh(this.geo.pillarCap, this.mat.pillarCap);
-      cap.position.y = 3.95;
-      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geo.pillarBody), this.mat.edgeMagenta);
-      edges.position.y = 1.95;
-      g.add(body, cap, edges);
+      g.add(new THREE.Mesh(this.geo.pillarBody, this.mat.pillarBody));
 
-      for (const sx of [-0.7, 0.7]) {
-        const strip = new THREE.Mesh(this.geo.pillarStrip, this.mat.pillarStrip);
-        strip.position.set(sx, 1.95, 0.37);
+      const cap = new THREE.Mesh(this.geo.pillarCap, this.mat.pillarCap);
+      cap.position.set(0, 3.88, 0);
+      g.add(cap);
+
+      for (const sx of [-1, 1]) {
+        const strip = new THREE.Mesh(this.geo.pillarStrip, this.mat.pillarCore);
+        strip.scale.x = sx;
         g.add(strip);
       }
 
-      const core = new THREE.Mesh(this.geo.pillarCore, this.mat.pillarCore);
+      const core = new THREE.Mesh(this.geo.coreGeo, this.mat.pillarCore);
       core.name = 'core';
-      core.position.y = 2.3;
+      core.position.set(0, 2.10, 0);
       g.add(core);
 
-      const glow = new THREE.Mesh(this.geo.pillarGlow, this.mat.pillarGlow);
-      glow.position.set(0, 2.0, -0.42);
+      const glow = new THREE.Mesh(this.geo.glowPillar, this.mat.glowPillar);
+      glow.position.set(0, 1.95, -0.38);
       glow.renderOrder = 1;
       g.add(glow);
     }
@@ -213,12 +216,15 @@ export class Assets {
 
   coin() {
     const g = new THREE.Group();
-    const ring = new THREE.Mesh(this.geo.coin, this.mat.coin);
-    const core = new THREE.Mesh(this.geo.coinCore, this.mat.coinCore);
-    core.position.z = 0.01;
-    const glow = this.sprite(COLOR.gold, 1.7, 0.55);
-    g.add(ring, core, glow);
-    g.userData.spinY = true;
+    // disc + rim share one spin node so the coin tumbles as a single object
+    const spin = new THREE.Group();
+    const disc = new THREE.Mesh(this.geo.coinDisc, this.mat.coinDisc);
+    disc.rotation.x = Math.PI / 2;
+    const rim = new THREE.Mesh(this.geo.coinRim, this.mat.coinRim);
+    spin.add(disc, rim);
+    g.add(spin);
+    g.add(this.sprite(COLOR.gold, 1.9, 0.6));
+    g.userData.spin = spin;
     return g;
   }
 

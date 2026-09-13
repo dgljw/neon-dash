@@ -48,7 +48,27 @@ if (SCENE === 'menu') {
     if (s % 4 === 3) key('ArrowRight');
     if (s % 7 === 5) key('ArrowUp');
     if (s % 9 === 7) key('ArrowDown');
-    if (game.state !== 'playing') { game.state = 'playing'; game.player.group.visible = true; }
+    if (game.state !== 'playing') {
+      game.state = 'playing';
+      game.player.group.visible = true;
+      game.player.y = 0; game.player.vy = 0; game.player.onGround = true;
+    }
+  }
+
+  // step to a frame where an obstacle sits nicely ahead — otherwise the shot
+  // is either empty tarmac or the inside of a gate
+  for (let i = 0; i < 400; i++) {
+    const near = game.world.obstacles
+      .map((o) => o.position.z)
+      .filter((z) => z < -2)
+      .sort((a, b) => b - a)[0];
+    if (near !== undefined && near < -11 && near > -24) break;
+    step(1);
+    if (game.state !== 'playing') {
+      game.state = 'playing';
+      game.player.group.visible = true;
+      game.player.y = 0; game.player.vy = 0; game.player.onGround = true;
+    }
   }
 } else if (SCENE === 'over') {
   game.startRun();
@@ -59,6 +79,22 @@ if (SCENE === 'menu') {
   // first frame of a run, nothing on screen yet
   game.startRun();
   step(2);
+} else if (SCENE === 'bike') {
+  // close-up study of the player model from a chosen angle
+  game.startRun();
+  step(2);
+  const VIEWS = {
+    back:  [[0, 1.35, 4.2], [0, 0.85, 0]],
+    side:  [[4.3, 1.2, 0.2], [0, 0.8, 0]],
+    three: [[2.9, 1.7, 3.1], [0, 0.85, 0]],
+    front: [[0, 1.25, -4.2], [0, 0.8, 0]],
+    top:   [[0.01, 4.4, 0.3], [0, 0.7, 0]],
+  };
+  const view = VIEWS[getArg('view', 'three')] || VIEWS.three;
+  game.camera.position.set(view[0][0], view[0][1], view[0][2]);
+  game.camera.lookAt(view[1][0], view[1][1], view[1][2]);
+  game.camera.fov = 38;
+  game.camera.updateProjectionMatrix();
 }
 
 const THREE = game.scene.constructor === Object ? null : await import('../vendor/three.module.min.js');

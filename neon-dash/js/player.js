@@ -5,7 +5,10 @@
  */
 import * as THREE from '../../vendor/three.module.min.js';
 import { CFG, COLOR, LANES } from './config.js';
-import { clamp, damp, lerp, easeOutCubic, makeGlowTexture, makeTrailTexture } from './utils.js';
+import {
+  clamp, damp, lerp, easeOutCubic, makeGlowTexture, makeTrailTexture,
+  loftGeometry, tubeGeometry, bladeGeometry,
+} from './utils.js';
 
 export class Player {
   constructor(scene, particles, audio) {
@@ -40,116 +43,148 @@ export class Player {
   /* ------------------------------------------------------------------ build */
 
   _build() {
-    // `group` carries world transform and the slide squash; `model` carries the
-    // overall art scale, so the two never fight each other.
     const g = new THREE.Group();
-    g.scale.setScalar(1.18);
+    g.scale.setScalar(1.0);
     this.model = g;
     this.group = new THREE.Group();
     this.group.add(g);
 
     /* ------------------------------------------------------------ materials */
     const hullMat = new THREE.MeshStandardMaterial({
-      color: 0x0a0616, roughness: 0.25, metalness: 1.0,
-      emissive: COLOR.magenta, emissiveIntensity: 0.06,
+      color: 0x0d0819, roughness: 0.26, metalness: 1.0,
+      emissive: COLOR.magenta, emissiveIntensity: 0.13,
+    });
+    const panelMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1035, roughness: 0.38, metalness: 0.9,
+      emissive: COLOR.violet, emissiveIntensity: 0.38,
     });
     const darkMat = new THREE.MeshStandardMaterial({
-      color: 0x06030d, roughness: 0.5, metalness: 0.8,
-      emissive: COLOR.violet, emissiveIntensity: 0.18,
+      color: 0x05030c, roughness: 0.5, metalness: 0.7,
+      emissive: 0x000000, emissiveIntensity: 0,
+    });
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0x0d1c33, roughness: 0.06, metalness: 1.0,
+      emissive: COLOR.cyan, emissiveIntensity: 0.22,
+      transparent: true, opacity: 0.7, side: THREE.DoubleSide,
     });
     const magenta = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
     const cyan = new THREE.MeshBasicMaterial({ color: COLOR.cyan });
-    const white = new THREE.MeshBasicMaterial({ color: 0xfff3d0 });
+    const warm = new THREE.MeshBasicMaterial({ color: 0xfff0cf });
 
-    const edges = (geo, color, op = 1) => new THREE.LineSegments(
-      new THREE.EdgesGeometry(geo),
-      new THREE.LineBasicMaterial({ color, transparent: op < 1, opacity: op })
-    );
+    /* -------------------------------------------------------------- fuselage */
+    // one shared cross-section, scaled per station — this is what makes the
+    // body read as a smoothly tapering machine rather than a stack of boxes
+    const HULL = [
+      [0.00, 1.00], [-0.62, 0.74], [-0.96, 0.22], [-0.96, -0.24], [-0.60, -0.76],
+      [0.00, -1.00], [0.60, -0.76], [0.96, -0.24], [0.96, 0.22], [0.62, 0.74],
+    ];
+    const hullRings = [
+      [-1.34, 0.40, 0.050, 0.035],
+      [-1.22, 0.40, 0.150, 0.085],
+      [-1.02, 0.40, 0.250, 0.140],
+      [-0.72, 0.41, 0.340, 0.190],
+      [-0.30, 0.43, 0.390, 0.225],
+      [ 0.15, 0.44, 0.400, 0.235],
+      [ 0.55, 0.45, 0.370, 0.225],
+      [ 0.88, 0.46, 0.300, 0.190],
+      [ 1.08, 0.47, 0.190, 0.135],
+      [ 1.16, 0.47, 0.090, 0.065],
+    ].map(([z, cy, sx, sy]) => ({ z, cy, sx, sy, profile: HULL }));
 
-    /* ---------------------------------------------------------------- hull */
-    const hullGeo = new THREE.BoxGeometry(1.02, 0.26, 1.95);
-    const hull = new THREE.Mesh(hullGeo, hullMat);
-    hull.position.y = 0.44;
-    g.add(hull);
-    const hullEdges = edges(hullGeo, COLOR.magenta);
-    hullEdges.position.y = 0.44;
-    g.add(hullEdges);
+    const hullGeo = loftGeometry(hullRings);
+    g.add(new THREE.Mesh(hullGeo, hullMat));
 
-    // nose, pointing down the track
-    const noseGeo = new THREE.ConeGeometry(0.4, 0.9, 4);
-    const nose = new THREE.Mesh(noseGeo, hullMat);
-    nose.rotation.x = -Math.PI / 2;
-    nose.rotation.z = Math.PI / 4;
-    nose.position.set(0, 0.44, -1.35);
-    g.add(nose);
-    const noseEdges = edges(noseGeo, COLOR.cyan, 0.85);
-    noseEdges.rotation.copy(nose.rotation);
-    noseEdges.position.copy(nose.position);
-    g.add(noseEdges);
+    // a lighter dorsal spine breaks up the silhouette and reads as panelling
+    const spineGeo = loftGeometry([
+      { z: -0.95, cy: 0.63, sx: 0.10, sy: 0.035, profile: HULL },
+      { z: -0.45, cy: 0.66, sx: 0.21, sy: 0.070, profile: HULL },
+      { z:  0.15, cy: 0.68, sx: 0.23, sy: 0.075, profile: HULL },
+      { z:  0.70, cy: 0.70, sx: 0.18, sy: 0.060, profile: HULL },
+      { z:  0.98, cy: 0.68, sx: 0.08, sy: 0.030, profile: HULL },
+    ]);
+    g.add(new THREE.Mesh(spineGeo, panelMat));
 
-    // canopy over the rider
-    const canopyGeo = new THREE.SphereGeometry(0.34, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2);
-    const canopy = new THREE.Mesh(canopyGeo, new THREE.MeshStandardMaterial({
-      color: 0x120a26, roughness: 0.1, metalness: 1.0,
-      emissive: COLOR.cyan, emissiveIntensity: 0.3,
-      transparent: true, opacity: 0.85,
-    }));
-    canopy.scale.set(1, 0.7, 1.5);
-    canopy.position.set(0, 0.5, -0.35);
-    g.add(canopy);
+    /* ---------------------------------------------------------------- fins */
+    const FIN = [[0, 0], [0.58, 0.03], [0.70, -0.05], [0.16, -0.15], [0, -0.11]];
+    const CANARD = [[0, 0], [0.30, 0.02], [0.34, -0.04], [0.08, -0.09], [0, -0.06]];
+    const finGeo = bladeGeometry(FIN, 0.030, 0.007);
+    const canardGeo = bladeGeometry(CANARD, 0.024, 0.006);
+    const bladeMat = hullMat.clone();
+    bladeMat.side = THREE.DoubleSide;
 
-    /* ------------------------------------------------------- side rails/pods */
-    const railGeo = new THREE.BoxGeometry(0.1, 0.09, 1.85);
-    const podGeo = new THREE.CylinderGeometry(0.19, 0.23, 0.36, 12);
-    for (const sx of [-1, 1]) {
-      const rail = new THREE.Mesh(railGeo, sx < 0 ? cyan : magenta);
-      rail.position.set(sx * 0.56, 0.4, 0);
-      g.add(rail);
+    for (const side of [-1, 1]) {
+      const fin = new THREE.Mesh(finGeo, bladeMat);
+      fin.rotation.x = -Math.PI / 2;
+      fin.rotation.y = side * 0.30;
+      fin.position.set(side * 0.33, 0.47, 0.30);
+      fin.scale.x = side;
+      g.add(fin);
 
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.8), darkMat);
-      wing.position.set(sx * 0.72, 0.52, 0.25);
-      wing.rotation.z = sx * 0.16;
-      g.add(wing);
-      // NOTE: Object3D.position/rotation are non-writable properties, so they
-      // must be copied into, never assigned over.
-      const wingEdge = edges(wing.geometry, sx < 0 ? COLOR.cyan : COLOR.magenta, 0.8);
-      wingEdge.position.copy(wing.position);
-      wingEdge.rotation.copy(wing.rotation);
-      g.add(wingEdge);
-
-      const pod = new THREE.Mesh(podGeo, darkMat);
-      pod.rotation.x = Math.PI / 2;
-      pod.position.set(sx * 0.56, 0.44, 1.02);
-      g.add(pod);
+      const canard = new THREE.Mesh(canardGeo, bladeMat);
+      canard.rotation.x = -Math.PI / 2;
+      canard.rotation.y = side * 0.22;
+      canard.position.set(side * 0.28, 0.40, -0.70);
+      canard.scale.x = side;
+      g.add(canard);
     }
 
-    // bright tail bar — this is what the player stares at all game
-    const tailGeo = new THREE.BoxGeometry(0.98, 0.11, 0.08);
-    const tail = new THREE.Mesh(tailGeo, white);
-    tail.position.set(0, 0.6, 1.02);
-    g.add(tail);
-    const tailGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.62),
-      new THREE.MeshBasicMaterial({
-        map: makeGlowTexture('#ff2fd0'), color: COLOR.magenta,
-        transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }));
-    tailGlow.position.set(0, 0.6, 1.06);
-    tailGlow.renderOrder = 4;
-    g.add(tailGlow);
+    /* ------------------------------------------------------------- tail fin */
+    const tailFinGeo = bladeGeometry(
+      [[0.36, 0.00], [-0.05, 0.00], [-0.30, 0.32], [-0.34, 0.45], [-0.04, 0.39], [0.22, 0.10]],
+      0.026, 0.006);
+    const tailFin = new THREE.Mesh(tailFinGeo, bladeMat);
+    tailFin.rotation.y = Math.PI / 2;
+    tailFin.position.set(0, 0.64, 0.72);
+    g.add(tailFin);
 
-    /* ------------------------------------------------------------- thrusters */
+    g.add(new THREE.Mesh(tubeGeometry([
+      new THREE.Vector3(0, 0.66, 0.36),
+      new THREE.Vector3(0, 1.00, 0.72),
+      new THREE.Vector3(0, 1.08, 1.06),
+    ], 0.013, 10, 5), cyan));
+
+    /* ------------------------------------------------------------ windscreen */
+    const wsGeo = bladeGeometry([[-0.20, 0], [0.20, 0], [0.15, 0.26], [0, 0.33], [-0.15, 0.26]], 0.022, 0.005);
+    const ws = new THREE.Mesh(wsGeo, glassMat);
+    ws.rotation.x = -0.62;
+    ws.position.set(0, 0.60, -0.72);
+    g.add(ws);
+
+    /* ------------------------------------------------------------ thrusters */
+    const bellPts = [];
+    for (let i = 0; i <= 7; i++) {
+      const t = i / 7;
+      bellPts.push(new THREE.Vector2(0.048 + t * t * 0.082, t * 0.26));
+    }
+    const bellGeo = new THREE.LatheGeometry(bellPts, 16);
+    const ringGeo = new THREE.TorusGeometry(0.135, 0.016, 6, 18);
+
     this.flames = [];
     this.flameMats = [];
-    const flameGeo = new THREE.ConeGeometry(0.2, 1.5, 10, 1, true);
-    for (const sx of [-1, 1]) {
+    const flameGeo = new THREE.ConeGeometry(0.115, 1.35, 10, 1, true);
+
+    for (const side of [-1, 1]) {
+      const bell = new THREE.Mesh(bellGeo, darkMat);
+      bell.rotation.x = Math.PI / 2;
+      bell.position.set(side * 0.205, 0.45, 0.90);
+      g.add(bell);
+
+      const ring = new THREE.Mesh(ringGeo, side < 0 ? cyan : magenta);
+      ring.position.set(side * 0.205, 0.45, 1.14);
+      g.add(ring);
+
+      // glowing throat
+      const throat = new THREE.Mesh(new THREE.CircleGeometry(0.10, 16), warm);
+      throat.position.set(side * 0.205, 0.45, 1.13);
+      g.add(throat);
+
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x9beeff, transparent: true, opacity: 0.9,
+        color: 0x9beeff, transparent: true, opacity: 0.85,
         blending: THREE.AdditiveBlending, depthWrite: false,
       });
       const f = new THREE.Mesh(flameGeo, mat);
       f.rotation.x = Math.PI / 2;
-      f.position.set(sx * 0.56, 0.44, 1.85);
+      f.position.set(side * 0.205, 0.45, 1.85);
       f.renderOrder = 5;
       g.add(f);
       this.flames.push(f);
@@ -158,35 +193,145 @@ export class Player {
     this.flame = this.flames[0];
     this.flameMat = this.flameMats[0];
 
+    /* ---------------------------------------------------------------- trim */
+    // thin swept tubes along the flanks — cheap detail that reads as machining
+    for (const side of [-1, 1]) {
+      const pts = [
+        new THREE.Vector3(side * 0.20, 0.44, -1.14),
+        new THREE.Vector3(side * 0.33, 0.52, -0.72),
+        new THREE.Vector3(side * 0.40, 0.54, -0.10),
+        new THREE.Vector3(side * 0.39, 0.55, 0.45),
+        new THREE.Vector3(side * 0.30, 0.53, 0.95),
+      ];
+      g.add(new THREE.Mesh(tubeGeometry(pts, 0.016, 22, 6), side < 0 ? cyan : magenta));
+    }
+
+    for (const side of [-1, 1]) {
+      g.add(new THREE.Mesh(tubeGeometry([
+        new THREE.Vector3(side * 0.08, 0.70, -0.85),
+        new THREE.Vector3(side * 0.15, 0.75, -0.30),
+        new THREE.Vector3(side * 0.17, 0.77, 0.30),
+        new THREE.Vector3(side * 0.12, 0.74, 0.80),
+      ], 0.012, 16, 5), side < 0 ? cyan : magenta));
+    }
+
+    // tail bar
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.055, 0.05), warm);
+    tail.position.set(0, 0.60, 1.12);
+    g.add(tail);
+
     /* ---------------------------------------------------------------- rider */
-    const riderMat = new THREE.MeshStandardMaterial({
-      color: 0x0d0720, roughness: 0.35, metalness: 0.6,
-      emissive: COLOR.violet, emissiveIntensity: 0.22,
+    const rider = new THREE.Group();
+    rider.position.set(0, 0.60, 0.22);
+    rider.rotation.x = -1.02;               // tucked forward over the tank
+    g.add(rider);
+
+    const suitMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0718, roughness: 0.42, metalness: 0.55,
+      emissive: COLOR.violet, emissiveIntensity: 0.20,
     });
-    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.5, 4, 12), riderMat);
-    torso.position.set(0, 1.02, 0.02);
-    torso.rotation.x = 0.42;
-    g.add(torso);
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1038, roughness: 0.3, metalness: 0.7,
+      emissive: COLOR.cyan, emissiveIntensity: 0.55,
+    });
+    const TORSO = [
+      [0.00, 1.00], [-0.70, 0.70], [-1.00, 0.00], [-0.70, -0.70],
+      [0.00, -1.00], [0.70, -0.70], [1.00, 0.00], [0.70, 0.70],
+    ];
+    // local +Z is the spine; the group rotation stands it up and leans it in
+    const torso = new THREE.Mesh(loftGeometry([
+      { z: 0.00, sx: 0.155, sy: 0.115, profile: TORSO },
+      { z: 0.18, sx: 0.165, sy: 0.125, profile: TORSO },
+      { z: 0.36, sx: 0.185, sy: 0.135, profile: TORSO },
+      { z: 0.46, sx: 0.150, sy: 0.110, profile: TORSO },
+    ]), suitMat);
+    rider.add(torso);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), riderMat);
-    head.position.set(0, 1.5, -0.2);
-    g.add(head);
+    // hips / seat pad
+    const hips = new THREE.Mesh(loftGeometry([
+      { z: -0.16, sx: 0.150, sy: 0.110, profile: TORSO },
+      { z:  0.04, sx: 0.175, sy: 0.125, profile: TORSO },
+    ]), suitMat);
+    rider.add(hips);
 
+    // helmet: a lofted teardrop, far smaller than the old capsule head
+    const HELM = [[0, 1], [-0.62, 0.72], [-1, 0.06], [-0.74, -0.6], [0, -1], [0.74, -0.6], [1, 0.06], [0.62, 0.72]];
+    const helmet = new THREE.Mesh(loftGeometry([
+      { z: 0.46, sx: 0.020, sy: 0.020, profile: HELM },
+      { z: 0.54, sx: 0.105, sy: 0.095, profile: HELM },
+      { z: 0.64, sx: 0.135, sy: 0.125, profile: HELM },
+      { z: 0.74, sx: 0.115, sy: 0.105, profile: HELM },
+      { z: 0.80, sx: 0.060, sy: 0.055, profile: HELM },
+    ]), suitMat);
+    rider.add(helmet);
+
+    // visor
     const visor = new THREE.Mesh(
-      new THREE.SphereGeometry(0.216, 16, 12, -0.6, 1.2, 0.7, 0.8), white);
-    visor.position.copy(head.position);
-    visor.rotation.y = Math.PI;
-    g.add(visor);
+      new THREE.SphereGeometry(0.128, 16, 12, -0.75, 1.5, 0.65, 0.85), warm);
+    visor.position.set(0, 0, 0.66);
+    rider.add(visor);
 
-    // glowing core between the rider's hands
+    // shoulders + arms reaching for the bars
+    const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.095, 0.14), accentMat);
+    shoulder.position.set(0, 0, 0.34);
+    rider.add(shoulder);
+
+    for (const side of [-1, 1]) {
+      const pad = new THREE.Mesh(loftGeometry([
+        { z: 0.28, sx: 0.075, sy: 0.045, profile: HELM },
+        { z: 0.40, sx: 0.095, sy: 0.055, profile: HELM },
+      ]), accentMat);
+      pad.position.set(side * 0.16, 0.0, 0);
+      rider.add(pad);
+    }
+
+    // spine stripe running up the back
+    rider.add(new THREE.Mesh(tubeGeometry([
+      new THREE.Vector3(0, -0.02, 0.02),
+      new THREE.Vector3(0, -0.06, 0.22),
+      new THREE.Vector3(0, -0.07, 0.40),
+    ], 0.020, 8, 5), cyan));
+
+    const armGeo = tubeGeometry([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, -0.02, 0.20),
+      new THREE.Vector3(0, -0.06, 0.42),
+    ], 0.045, 8, 6);
+    for (const side of [-1, 1]) {
+      const arm = new THREE.Mesh(armGeo, suitMat);
+      arm.position.set(side * 0.155, 0.01, 0.30);
+      arm.rotation.y = side * 0.22;
+      rider.add(arm);
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), accentMat);
+      hand.position.set(side * 0.20, -0.06, 0.72);
+      rider.add(hand);
+    }
+
+    // legs bent forward to the pegs
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(tubeGeometry([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, -0.16, -0.06),
+        new THREE.Vector3(0.02, -0.30, -0.20),
+      ], 0.058, 8, 6), suitMat);
+      leg.position.set(side * 0.14, -0.05, 0.02);
+      rider.add(leg);
+    }
+
+    /* ---------------------------------------------------------- handlebars */
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.035, 0.035), darkMat);
+    bar.position.set(0, 0.68, -0.42);
+    g.add(bar);
+
+    /* ---------------------------------------------------------------- core */
     this.coreMat = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
-    this.core = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), this.coreMat);
-    this.core.position.set(0, 0.78, 0.34);
+    this.core = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), this.coreMat);
+    this.core.position.set(0, 0.72, -0.12);
     g.add(this.core);
-    const coreGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5),
+    const coreGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 1.05),
       new THREE.MeshBasicMaterial({
         map: makeGlowTexture('#ff2fd0'), color: COLOR.magenta,
-        transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending,
+        transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending,
         depthWrite: false,
       }));
     coreGlow.position.copy(this.core.position);
@@ -195,12 +340,12 @@ export class Player {
     g.add(coreGlow);
     this.coreGlow = coreGlow;
 
-    /* ------------------------------------------------------- light and trail */
+    /* --------------------------------------------------------- light & trail */
     const poolMat = new THREE.MeshBasicMaterial({
-      map: makeGlowTexture('#27f4ff'), transparent: true, opacity: 0.5,
+      map: makeGlowTexture('#27f4ff'), transparent: true, opacity: 0.45,
       blending: THREE.AdditiveBlending, depthWrite: false,
     });
-    this.pool = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 3.4), poolMat);
+    this.pool = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), poolMat);
     this.pool.rotation.x = -Math.PI / 2;
     this.pool.position.y = 0.02;
     this.pool.renderOrder = 2;
@@ -210,7 +355,7 @@ export class Player {
       map: makeTrailTexture(), transparent: true, opacity: 0.0,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
-    this.trail = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 6), this.trailMat);
+    this.trail = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 6), this.trailMat);
     this.trail.rotation.x = -Math.PI / 2;
     this.trail.position.set(0, 0.06, 3.5);
     this.trail.renderOrder = 3;
@@ -220,8 +365,8 @@ export class Player {
     this.shieldMat = new THREE.MeshBasicMaterial({
       color: COLOR.green, wireframe: true, transparent: true, opacity: 0.0,
     });
-    this.shieldMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1.3, 1), this.shieldMat);
-    this.shieldMesh.position.y = 1.0;
+    this.shieldMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 1), this.shieldMat);
+    this.shieldMesh.position.y = 0.9;
     this.shieldMesh.visible = false;
     g.add(this.shieldMesh);
   }

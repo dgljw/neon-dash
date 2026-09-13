@@ -11,6 +11,7 @@ import { CFG, COLOR, LANES, POWERUPS } from './config.js';
 import {
   makeRoadTexture, makeSunTexture, makeStarTexture, makeGlowTexture, rand, randInt, pick, clamp,
   makeBuildingTexture, makeGroundGridTexture, makeVerticalFadeTexture,
+  loftGeometry, tubeGeometry, mergeGeometries,
 } from './utils.js';
 import { Assets, Pool, OBSTACLE, laneAt } from './entities.js';
 
@@ -42,6 +43,8 @@ export class World {
       coin: new Pool(() => this.assets.coin(), (o) => { o.visible = false; }),
       arch: new Pool(() => this._makeArch(), (o) => { o.visible = false; }),
       city: new Pool(() => this._makeCityBlock(), (o) => { o.visible = false; }),
+      // NOTE: city blocks own a merged, one-off geometry each; they are pooled
+      // rather than rebuilt, so that geometry is intentionally long-lived.
     };
 
     this.reset();
@@ -115,10 +118,32 @@ export class World {
     const M = this.mat = this.mat || {};
 
     /* -------- neon gantries that span the track -------- */
-    G.post = new THREE.BoxGeometry(0.46, 7.8, 0.46);
-    G.beam = new THREE.BoxGeometry(11.2, 0.5, 0.62);
-    G.beamGlow = new THREE.BoxGeometry(10.6, 0.1, 0.14);
-    G.postStrip = new THREE.BoxGeometry(0.1, 6.4, 0.12);
+    const ROUND = [[0, 1], [-0.7, 0.7], [-1, 0], [-0.7, -0.7], [0, -1], [0.7, -0.7], [1, 0], [0.7, 0.7]];
+    const SLAB = [[0, 1], [-0.55, 0.86], [-1, 0.2], [-1, -0.2], [-0.55, -0.86], [0, -1], [0.55, -0.86], [1, -0.2], [1, 0.2], [0.55, 0.86]];
+
+    // tapered posts, then stood upright
+    G.post = loftGeometry([
+      { z: 0.00, sx: 0.300, sy: 0.300, profile: ROUND },
+      { z: 0.55, sx: 0.235, sy: 0.235, profile: ROUND },
+      { z: 6.20, sx: 0.195, sy: 0.195, profile: ROUND },
+      { z: 7.30, sx: 0.230, sy: 0.230, profile: ROUND },
+    ]);
+
+    // cross beam, built along Z then laid across the track
+    G.beam = loftGeometry([
+      { z: -5.60, sx: 0.15, sy: 0.20, profile: SLAB },
+      { z: -3.80, sx: 0.25, sy: 0.33, profile: SLAB },
+      { z:  0.00, sx: 0.29, sy: 0.39, profile: SLAB },
+      { z:  3.80, sx: 0.25, sy: 0.33, profile: SLAB },
+      { z:  5.60, sx: 0.15, sy: 0.20, profile: SLAB },
+    ]);
+
+    G.postStrip = tubeGeometry([
+      new THREE.Vector3(0, 0.35, 0), new THREE.Vector3(0, 3.80, 0), new THREE.Vector3(0, 7.05, 0),
+    ], 0.030, 10, 5);
+    G.beamGlow = tubeGeometry([
+      new THREE.Vector3(-5.15, 0, 0), new THREE.Vector3(0, 0, 0), new THREE.Vector3(5.15, 0, 0),
+    ], 0.050, 14, 6);
 
     M.structure = new THREE.MeshStandardMaterial({
       color: 0x160d2c, roughness: 0.42, metalness: 0.85,
@@ -208,7 +233,7 @@ export class World {
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
     const lineGeo = new THREE.PlaneGeometry(0.05, 3.2);
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 16; i++) {
       const m = new THREE.Mesh(lineGeo, lineMat.clone());
       m.position.set(rand(-11, 11), rand(0.3, 7), rand(-70, 6));
       m.rotation.y = Math.PI / 2;
@@ -225,44 +250,66 @@ export class World {
 
     for (const side of [-1, 1]) {
       const post = new THREE.Mesh(G.post, M.structure);
-      post.position.set(side * 5.15, 3.9, 0);
+      post.rotation.x = -Math.PI / 2;
+      post.position.set(side * 5.15, 0, 0);
       g.add(post);
 
       const strip = new THREE.Mesh(G.postStrip, M.postStrip);
-      strip.position.set(side * 4.9, 3.6, 0);
+      strip.position.set(side * 4.82, 0, 0);
       g.add(strip);
     }
 
     const beam = new THREE.Mesh(G.beam, M.structure);
-    beam.position.set(0, 7.6, 0);
+    beam.rotation.y = Math.PI / 2;
+    beam.position.set(0, 7.55, 0);
     g.add(beam);
 
     const glow = new THREE.Mesh(G.beamGlow, M.beamGlow);
-    glow.position.set(0, 7.32, 0);
+    glow.position.set(0, 7.30, 0);
     g.add(glow);
 
     return g;
   }
 
-  /** A distant tower with lit windows. */
+  /** A distant tower: shaft, often a setback storey and spire, merged to 1 draw. */
   _makeCityBlock() {
-    const g = new THREE.Group();
     const w = rand(3.2, 7.5);
-    const h = rand(9, 34);
+    const h = rand(9, 30);
     const d = rand(3.2, 7.5);
 
-    const body = new THREE.Mesh(this.geo.city, pick(this.cityMats));
-    body.scale.set(w, h, d);
-    body.position.y = h / 2;
-    g.add(body);
+    // bake every part into one geometry so a tower costs a single draw call
+    const parts = [];
+    const piece = (sx, sy, sz, y) => {
+      const bg = new THREE.BoxGeometry(1, 1, 1);
+      bg.scale(sx, sy, sz);
+      bg.translate(0, y, 0);
+      parts.push(bg);
+    };
 
-    if (Math.random() < 0.45) {
-      const cap = new THREE.Mesh(this.geo.cityCap, this.mat.cityCap);
-      cap.scale.set(w * 1.02, 1, d * 1.02);
-      cap.position.y = h + 0.06;
-      g.add(cap);
+    piece(w, h, d, h / 2);
+    let top = h;
+
+    if (Math.random() < 0.55) {
+      const w2 = w * rand(0.42, 0.7);
+      const d2 = d * rand(0.42, 0.7);
+      const h2 = h * rand(0.22, 0.55);
+      piece(w2, h2, d2, h + h2 / 2);
+      top = h + h2;
+
+      if (Math.random() < 0.35) {
+        const h3 = h2 * rand(0.3, 0.6);
+        piece(w2 * 0.5, h3, d2 * 0.5, top + h3 / 2);
+        top += h3;
+      }
     }
-    g.userData.height = h;
+
+    const geo = mergeGeometries(parts);
+    for (const g of parts) g.dispose();
+
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(geo, pick(this.cityMats)));
+    g.userData.height = top;
+    g.userData.merged = true;
     return g;
   }
 
@@ -579,8 +626,8 @@ export class World {
         }
       }
 
-      c.rotation.y += dt * 3.4;
-      c.rotation.z = Math.sin(ud.phase + now * 2) * 0.14;
+      if (ud.spin) ud.spin.rotation.y += dt * 3.4;
+      c.rotation.z = Math.sin(ud.phase + now * 2) * 0.12;
 
       const W = CFG.bodyHalfDepth + 0.45;
       if (!ud.consumed && z0 < W && z > -W) {

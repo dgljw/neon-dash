@@ -278,6 +278,144 @@ export function hexToRgba(hex, alpha) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
+/* -------------------------------------------------------------- geometry */
+
+/**
+ * Build a lofted (cross-section extruded) mesh — the workhorse for sleek,
+ * tapered vehicle bodies. Feed it a series of rings along Z; each ring is a
+ * shared 2D profile scaled and offset in place. Rings must all use the same
+ * profile, and the profile should wind counter-clockwise when viewed from +Z.
+ *
+ * @param {Array<{z:number, profile:number[][], cx?:number, cy?:number,
+ *                sx?:number, sy?:number}>} rings
+ * @param {{caps?:boolean}} [opts]
+ * @returns {THREE.BufferGeometry}
+ */
+export function loftGeometry(rings, opts = {}) {
+  const caps = opts.caps !== false;
+  const n = rings[0].profile.length;
+  const pos = [];
+  const idx = [];
+
+  for (const r of rings) {
+    const cx = r.cx || 0;
+    const cy = r.cy || 0;
+    const sx = r.sx === undefined ? 1 : r.sx;
+    const sy = r.sy === undefined ? 1 : r.sy;
+    for (const pt of r.profile) pos.push(cx + pt[0] * sx, cy + pt[1] * sy, r.z);
+  }
+
+  // side walls — winding chosen so normals face outward
+  for (let i = 0; i < rings.length - 1; i++) {
+    const a = i * n;
+    const b = (i + 1) * n;
+    for (let j = 0; j < n; j++) {
+      const k = (j + 1) % n;
+      idx.push(a + j, b + k, b + j);
+      idx.push(a + j, a + k, b + k);
+    }
+  }
+
+  if (caps) {
+    const first = rings[0];
+    const c0 = pos.length / 3;
+    pos.push(first.cx || 0, first.cy || 0, first.z);
+    for (let j = 0; j < n; j++) idx.push(c0, (j + 1) % n, j);
+
+    const last = rings[rings.length - 1];
+    const base = (rings.length - 1) * n;
+    const c1 = pos.length / 3;
+    pos.push(last.cx || 0, last.cy || 0, last.z);
+    for (let j = 0; j < n; j++) idx.push(c1, base + j, base + (j + 1) % n);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Concatenate indexed BufferGeometries that share the same attribute layout
+ * (position / normal / uv). Lets a multi-part object — a tower with a setback
+ * and a spire — collapse into a single draw call.
+ */
+export function mergeGeometries(geos) {
+  let vCount = 0;
+  let iCount = 0;
+  for (const g of geos) {
+    vCount += g.attributes.position.count;
+    iCount += g.index ? g.index.count : g.attributes.position.count;
+  }
+
+  const pos = new Float32Array(vCount * 3);
+  const nor = new Float32Array(vCount * 3);
+  const uv = new Float32Array(vCount * 2);
+  const idx = new Uint32Array(iCount);
+
+  let vo = 0;
+  let io = 0;
+  for (const g of geos) {
+    const p = g.attributes.position;
+    const n = g.attributes.normal;
+    const t = g.attributes.uv;
+    pos.set(p.array, vo * 3);
+    if (n) nor.set(n.array, vo * 3);
+    if (t) uv.set(t.array, vo * 2);
+    if (g.index) {
+      const a = g.index.array;
+      for (let i = 0; i < a.length; i++) idx[io + i] = a[i] + vo;
+      io += a.length;
+    } else {
+      for (let i = 0; i < p.count; i++) idx[io + i] = vo + i;
+      io += p.count;
+    }
+    vo += p.count;
+  }
+
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return out;
+}
+
+/** Thin glowing line following a path — used for neon trim. */
+export function tubeGeometry(points, radius = 0.018, tubular = 24, radial = 6) {
+  const curve = new THREE.CatmullRomCurve3(points);
+  return new THREE.TubeGeometry(curve, tubular, radius, radial, false);
+}
+
+/**
+ * A flat, slightly beveled blade (fins, vanes, windscreens).
+ * Pass an array of outlines to pack several blades into a single geometry —
+ * three chevrons then cost one draw call instead of three.
+ */
+export function bladeGeometry(outline, thickness = 0.035, bevel = 0.008) {
+  const outlines = Array.isArray(outline[0][0]) ? outline : [outline];
+  const shape = outlines.map((o) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(o[0][0], o[0][1]);
+    for (let i = 1; i < o.length; i++) sh.lineTo(o[i][0], o[i][1]);
+    sh.closePath();
+    return sh;
+  });
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(0.001, thickness - bevel * 2),
+    bevelEnabled: bevel > 0,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 2,
+    curveSegments: 4,
+  });
+  geo.translate(0, 0, -(thickness - bevel * 2) / 2);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 /* --------------------------------------------------------------- disposal */
 
 export function disposeObject(root) {
