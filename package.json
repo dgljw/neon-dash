@@ -1,0 +1,24 @@
+{
+  "name": "neon-dash",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NEON DASH 霓虹疾走 — a synthwave 3D endless runner built with Three.js. Static, zero runtime dependencies.",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/serve.mjs",
+    "start": "node tools/serve.mjs",
+    "test": "node tools/gameplay-test.mjs 300"
+  },
+  "keywords": [
+    "threejs",
+    "webgl",
+    "game",
+    "endless-runner",
+    "synthwave",
+    "neon"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

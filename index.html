@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#07030f" />
+<meta name="description" content="NEON DASH 霓虹疾走 — 纯 Web 的 3D 霓虹无尽跑酷。三车道、跳跃、滑铲、磁铁与加速，手机与桌面都能玩。" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<title>NEON DASH · 霓虹疾走</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307030f'/%3E%3Cpath d='M18 3 7 18h6l-2 11 11-15h-6z' fill='%2327f4ff'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<div id="grain" aria-hidden="true"></div>
+<div id="flash" aria-hidden="true"></div>
+
+<!-- ============================== HUD ============================== -->
+<div id="hud" class="layer hidden">
+  <div class="hud-top">
+    <div class="stat">
+      <span class="stat-label">得分 SCORE</span>
+      <span class="stat-value" id="hud-score">0</span>
+    </div>
+    <div class="stat stat-center">
+      <span class="stat-label">距离 DISTANCE</span>
+      <span class="stat-value sm"><b id="hud-dist">0</b><em>m</em></span>
+    </div>
+    <div class="stat stat-right">
+      <span class="stat-label">金币 COINS</span>
+      <span class="stat-value sm gold"><b id="hud-coins">0</b></span>
+    </div>
+  </div>
+
+  <div id="combo" class="combo"></div>
+
+  <div class="hud-bottom">
+    <div class="speedo">
+      <div class="speedo-track"><i id="speed-fill"></i></div>
+      <span class="speedo-text"><b id="hud-speed">0</b> km/h</span>
+    </div>
+    <div id="powers" class="powers"></div>
+  </div>
+
+  <button id="btn-pause" class="icon-btn" aria-label="暂停">❚❚</button>
+</div>
+
+<!-- ======================= touch controls ======================= -->
+<div id="touchpad" class="layer hidden">
+  <button class="tbtn t-left"  data-act="left">◀</button>
+  <button class="tbtn t-jump"  data-act="jump">▲</button>
+  <button class="tbtn t-slide" data-act="slide">▼</button>
+  <button class="tbtn t-right" data-act="right">▶</button>
+</div>
+
+<!-- ========================== start screen ========================== -->
+<div id="screen-start" class="layer screen">
+  <div class="panel">
+    <h1 class="title">
+      <span class="t1">NEON</span><span class="t2">DASH</span>
+    </h1>
+    <p class="subtitle">霓虹疾走 · 三车道无尽跑酷</p>
+
+    <div class="best" id="start-best-line">
+      <span class="best-label">最高分</span>
+      <span class="best-value" id="start-best">0</span>
+    </div>
+
+    <button id="btn-play" class="btn primary">开始奔跑</button>
+
+    <div class="howto">
+      <div class="howto-col">
+        <h3>操作</h3>
+        <ul>
+          <li><kbd>←</kbd> <kbd>→</kbd> 或 <kbd>A</kbd> <kbd>D</kbd> — 左右换道</li>
+          <li><kbd>↑</kbd> / <kbd>空格</kbd> — 跳跃</li>
+          <li><kbd>↓</kbd> — 滑铲</li>
+          <li><kbd>P</kbd> 暂停 · <kbd>R</kbd> 重开 · <kbd>M</kbd> 静音</li>
+        </ul>
+      </div>
+      <div class="howto-col">
+        <h3>手机</h3>
+        <ul>
+          <li>左右滑动 — 换道</li>
+          <li>上滑 / 点击 — 跳跃</li>
+          <li>下滑 — 滑铲</li>
+          <li>也可用屏幕四角按钮</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span class="lg"><i class="dot cyan"></i>跳过矮栏</span>
+      <span class="lg"><i class="dot gold"></i>滑过横杆</span>
+      <span class="lg"><i class="dot magenta"></i>绕开立柱</span>
+    </div>
+
+    <button id="btn-mute-start" class="btn ghost small">🔊 声音：开</button>
+  </div>
+</div>
+
+<!-- ========================== pause screen ========================== -->
+<div id="screen-pause" class="layer screen hidden">
+  <div class="panel narrow">
+    <h2 class="screen-title">已暂停</h2>
+    <p class="screen-sub">喘口气，霓虹不会跑掉。</p>
+    <button id="btn-resume" class="btn primary">继续</button>
+    <button id="btn-quit" class="btn ghost">回到主页</button>
+    <button id="btn-mute-pause" class="btn ghost small">🔊 声音：开</button>
+  </div>
+</div>
+
+<!-- ======================== game over screen ======================== -->
+<div id="screen-over" class="layer screen hidden">
+  <div class="panel narrow">
+    <h2 class="screen-title danger">撞车了</h2>
+    <p class="screen-sub" id="over-sub">再来一次，你会跑得更远。</p>
+
+    <div class="result">
+      <div class="result-main">
+        <span class="result-label">本局得分</span>
+        <span class="result-value" id="over-score">0</span>
+      </div>
+      <div class="result-grid">
+        <div><span>距离</span><b id="over-dist">0 m</b></div>
+        <div><span>金币</span><b id="over-coins">0</b></div>
+        <div><span>最高连击</span><b id="over-combo">x1</b></div>
+        <div><span>最高分</span><b id="over-best">0</b></div>
+      </div>
+      <div class="newbest hidden" id="over-newbest">★ 新纪录 ★</div>
+    </div>
+
+    <button id="btn-retry" class="btn primary">再跑一次</button>
+    <button id="btn-home" class="btn ghost">回到主页</button>
+  </div>
+</div>
+
+<!-- =========================== loading =========================== -->
+<div id="loading" class="layer screen">
+  <div class="loader">
+    <div class="loader-bar"><i></i></div>
+    <p>正在点亮霓虹…</p>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
