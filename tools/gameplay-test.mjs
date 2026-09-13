@@ -96,11 +96,11 @@ Math.random = () => makeRng(currentSeed)();   // replaced per run below
 /* --------------------------------------------------------------- imports */
 
 const THREE = await import('../vendor/three.module.min.js');
-const { CFG, LANES } = await import('../js/config.js');
-const { World } = await import('../js/world.js');
-const { Player } = await import('../js/player.js');
-const { ParticleSystem } = await import('../js/particles.js');
-const { laneAt } = await import('../js/entities.js');
+const { CFG, LANES } = await import('../neon-dash/js/config.js');
+const { World } = await import('../neon-dash/js/world.js');
+const { Player } = await import('../neon-dash/js/player.js');
+const { ParticleSystem } = await import('../neon-dash/js/particles.js');
+const { laneAt, OBSTACLE } = await import('../neon-dash/js/entities.js');
 
 /* ------------------------------------------------------------- assertions */
 
@@ -111,6 +111,39 @@ function check(cond, msg, detail) {
     console.error('  ✗ ' + msg + (detail ? '  [' + detail + ']' : ''));
   }
   return cond;
+}
+
+/* ---------------------------------------------------- jump arc calibration */
+
+/**
+ * Measure, rather than hardcode, the window during which a jump keeps the
+ * player above a low barrier — by jumping the REAL Player and sampling it.
+ * Any future change to gravity or jump velocity is picked up automatically.
+ */
+function calibrateJump(scene, particles, audioStub, dt) {
+  const probe = new Player(scene, particles, audioStub);
+  probe.reset();
+  probe.jump();
+
+  const threshold = OBSTACLE.low.yTop;
+  const samples = [];
+  for (let i = 0; i < 240; i++) {
+    probe.update(dt, CFG.speedStart);
+    samples.push({ t: (i + 1) * dt, y: probe.y });
+    if (probe.onGround && i > 3) break;
+  }
+  scene.remove(probe.group);
+
+  let enter = null, exit = null;
+  for (const s of samples) {
+    if (s.y > threshold) { if (enter === null) enter = s.t; exit = s.t; }
+  }
+  return {
+    enter, exit,
+    airtime: samples.length ? samples[samples.length - 1].t : 0,
+    apex: samples.reduce((m, s) => Math.max(m, s.y), 0),
+    threshold,
+  };
 }
 
 /* --------------------------------------------- module state used by the bot */
@@ -214,14 +247,14 @@ function playFrame(speed, stats) {
     const t = -imm.z / speed;                  // seconds until it reaches z = 0
 
     if (imm.kind === 'low') {
-      // Semi-implicit Euler keeps the player above y = 1.15 for roughly
-      // 0.087s .. 0.458s after take-off. The barrier also has depth, so the
+      // The jump keeps the player above the barrier for [enter, exit] seconds
+      // (measured from the real physics). The barrier also has depth, so the
       // boxes overlap in z for w = (bodyHalfDepth + halfDepth)/speed on each
-      // side of the crossing — the jump must cover that whole span, which puts
+      // side of the crossing; the jump must cover that whole span, which puts
       // the ideal take-off in the middle of the safe interval.
-      const w = (CFG.bodyHalfDepth + 0.42) / speed;
-      const lo = 0.087 + w;
-      const hi = 0.458 - w;
+      const w = (CFG.bodyHalfDepth + OBSTACLE.low.halfDepth) / speed;
+      const lo = stats.jump.enter + w;
+      const hi = stats.jump.exit - w;
       const mid = (lo + hi) / 2;
       if (hi > lo && player.onGround && t <= mid + 0.06 && t > mid - 0.06) {
         if (player.jump()) stats.jumps++;
@@ -324,6 +357,9 @@ function runSimulation(seed, seconds) {
 
   const dt = 1 / 60;
   const totalFrames = Math.round(seconds * 60);
+
+  const jump = calibrateJump(scene, particles, audioStub, dt);
+  stats.jump = jump;
 
   const ctx = {
     speed: CFG.speedStart, distance: 0, difficulty: 0,
@@ -473,6 +509,10 @@ console.log('  total rows generated   :', totalRows);
 console.log('  coin pickup rate       :', totalCoins ? ((picked / totalCoins) * 100).toFixed(1) + '%' : 'n/a',
             `(${picked}/${totalCoins})`);
 console.log('  peak live obstacles    :', peakObs, '/ peak live coins:', peakCoins);
+const j = results[0].jump;
+console.log('  measured jump arc      : apex ' + j.apex.toFixed(2) + 'm, airtime ' + j.airtime.toFixed(3) +
+            's, above ' + j.threshold + 'm for ' + (j.exit - j.enter).toFixed(3) + 's');
+console.log('  min seconds between rows:', CFG.minRowGapTime, '(must exceed airtime ' + j.airtime.toFixed(3) + 's)');
 console.log('  seeds survived cleanly :', clean.length + '/' + results.length);
 
 // print a post-mortem for the first failure

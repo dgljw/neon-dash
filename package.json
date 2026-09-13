@@ -1,16 +1,19 @@
 {
-  "name": "neon-dash",
+  "name": "jianguo18-top",
   "version": "1.0.0",
   "private": true,
-  "description": "NEON DASH 霓虹疾走 — a synthwave 3D endless runner built with Three.js. Static, zero runtime dependencies.",
+  "description": "jianguo18.top 游戏厅 — 一个静态小游戏发布页，含 NEON DASH（Three.js 3D 跑酷）与人生模拟器。零运行时依赖，附无头测试与离线渲染预览工具。",
   "type": "module",
   "scripts": {
     "dev": "node tools/serve.mjs",
     "start": "node tools/serve.mjs",
-    "test": "npm run test:gameplay && npm run test:boot",
+    "test": "npm run test:gameplay && npm run test:boot && npm run test:portal",
     "test:gameplay": "node tools/gameplay-test.mjs 120 5",
     "test:gameplay:long": "node tools/gameplay-test.mjs 400 14",
-    "test:boot": "node tools/boot-test.mjs"
+    "test:boot": "node tools/boot-test.mjs",
+    "test:portal": "node tools/portal-test.mjs",
+    "preview:portal": "node tools/portal-mock.mjs",
+    "preview:game": "node tools/preview-render.mjs --scene play --seconds 15 --width 480"
   },
   "keywords": [
     "threejs",

@@ -6,10 +6,11 @@
  * toward +Z. That keeps collision trivial and avoids float precision drift on
  * long runs.
  */
-import * as THREE from '../vendor/three.module.min.js';
+import * as THREE from '../../vendor/three.module.min.js';
 import { CFG, COLOR, LANES, POWERUPS } from './config.js';
 import {
   makeRoadTexture, makeSunTexture, makeStarTexture, makeGlowTexture, rand, randInt, pick, clamp,
+  makeBuildingTexture, makeGroundGridTexture, makeVerticalFadeTexture,
 } from './utils.js';
 import { Assets, Pool, OBSTACLE, laneAt } from './entities.js';
 
@@ -39,7 +40,8 @@ export class World {
       high: new Pool(() => this.assets.obstacle('high')),
       pillar: new Pool(() => this.assets.obstacle('pillar')),
       coin: new Pool(() => this.assets.coin(), (o) => { o.visible = false; }),
-      scenery: new Pool(() => this._makeSceneryPillar(), (o) => { o.visible = false; }),
+      arch: new Pool(() => this._makeArch(), (o) => { o.visible = false; }),
+      city: new Pool(() => this._makeCityBlock(), (o) => { o.visible = false; }),
     };
 
     this.reset();
@@ -106,30 +108,101 @@ export class World {
     this.road.position.set(0, 0, -ROAD_L / 2 + 40);
     this.scene.add(this.road);
 
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x050310, roughness: 0.9, metalness: 0.1 });
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 700), groundMat);
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.position.set(0, -0.06, -180);
-    this.scene.add(this.ground);
-
-    const railMat = new THREE.MeshBasicMaterial({ color: COLOR.rail });
-    const railGeo = new THREE.BoxGeometry(0.09, 0.09, ROAD_L);
-    for (const x of [-ROAD_W / 2 + 0.05, ROAD_W / 2 - 0.05]) {
-      const rail = new THREE.Mesh(railGeo, railMat);
-      rail.position.set(x, 0.05, -ROAD_L / 2 + 40);
-      this.scene.add(rail);
-    }
   }
 
   _buildScenery() {
-    this.pylonGeo = new THREE.BoxGeometry(0.34, 9, 0.34);
-    this.pylonMat = new THREE.MeshStandardMaterial({
-      color: 0x120a22, roughness: 0.5, metalness: 0.7,
-      emissive: COLOR.violet, emissiveIntensity: 0.5,
-    });
-    this.pylonCapGeo = new THREE.BoxGeometry(0.62, 0.2, 0.62);
-    this.pylonCapMat = new THREE.MeshBasicMaterial({ color: COLOR.violet });
+    const G = this.geo = this.geo || {};
+    const M = this.mat = this.mat || {};
 
+    /* -------- neon gantries that span the track -------- */
+    G.post = new THREE.BoxGeometry(0.46, 7.8, 0.46);
+    G.beam = new THREE.BoxGeometry(11.2, 0.5, 0.62);
+    G.beamGlow = new THREE.BoxGeometry(10.6, 0.1, 0.14);
+    G.postStrip = new THREE.BoxGeometry(0.1, 6.4, 0.12);
+
+    M.structure = new THREE.MeshStandardMaterial({
+      color: 0x160d2c, roughness: 0.42, metalness: 0.85,
+      emissive: COLOR.violet, emissiveIntensity: 0.6,
+    });
+    M.beamGlow = new THREE.MeshBasicMaterial({ color: COLOR.cyan });
+    M.postStrip = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
+
+    /* -------- distant city -------- */
+    G.city = new THREE.BoxGeometry(1, 1, 1);
+    G.cityCap = new THREE.BoxGeometry(1, 0.12, 1);
+    this.cityTextures = [makeBuildingTexture(), makeBuildingTexture(), makeBuildingTexture()];
+    this.cityMats = this.cityTextures.map((tex) => new THREE.MeshStandardMaterial({
+      map: tex,
+      emissiveMap: tex,
+      emissive: 0xffffff,
+      emissiveIntensity: 1.5,
+      color: 0x241640,
+      roughness: 0.75,
+      metalness: 0.15,
+    }));
+    M.cityCap = new THREE.MeshBasicMaterial({ color: COLOR.cyan });
+
+    /* -------- ground that extends past the track -------- */
+    const gridTex = makeGroundGridTexture();
+    gridTex.repeat.set(24, 70);
+    const groundMat = new THREE.MeshStandardMaterial({
+      map: gridTex,
+      emissiveMap: gridTex,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.5,
+      color: 0x0a0616,
+      roughness: 0.85,
+      metalness: 0.2,
+    });
+    this.groundGridTex = gridTex;
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(260, 700), groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, -0.05, -180);
+    this.scene.add(ground);
+    this.ground = ground;
+
+    /* -------- glowing light walls along both road edges -------- */
+    const wallGeo = new THREE.BoxGeometry(0.34, 0.5, ROAD_L);
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x120a24, roughness: 0.35, metalness: 0.8,
+      emissive: COLOR.violet, emissiveIntensity: 0.8,
+    });
+    const lipGeo = new THREE.BoxGeometry(0.4, 0.09, ROAD_L);
+    const lipMat = new THREE.MeshBasicMaterial({ color: COLOR.cyan });
+
+    const fadeTex = makeVerticalFadeTexture();
+    this.edgeGlowMats = [];
+    for (const side of [-1, 1]) {
+      const x = side * (ROAD_W / 2 + 0.2);
+
+      const wall = new THREE.Mesh(wallGeo, wallMat);
+      wall.position.set(x, 0.25, -ROAD_L / 2 + 40);
+      this.scene.add(wall);
+
+      const lip = new THREE.Mesh(lipGeo, lipMat);
+      lip.position.set(x, 0.52, -ROAD_L / 2 + 40);
+      this.scene.add(lip);
+
+      // additive gradient sheet rising off the wall — the "light wall"
+      const glowMat = new THREE.MeshBasicMaterial({
+        map: fadeTex,
+        color: side < 0 ? COLOR.cyan : COLOR.magenta,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.7, ROAD_L), glowMat);
+      glow.rotation.x = -Math.PI / 2;
+      glow.rotation.z = Math.PI / 2;
+      glow.position.set(x, 0.5, -ROAD_L / 2 + 40);
+      glow.renderOrder = 2;
+      this.scene.add(glow);
+      this.edgeGlowMats.push(glowMat);
+    }
+
+    /* -------- camera-facing speed streaks -------- */
     const lineMat = new THREE.MeshBasicMaterial({
       color: 0xbfe9ff, transparent: true, opacity: 0.0,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
@@ -145,13 +218,51 @@ export class World {
     }
   }
 
-  _makeSceneryPillar() {
+  /** A neon gantry spanning the track. */
+  _makeArch() {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(this.pylonGeo, this.pylonMat);
-    body.position.y = 4.5;
-    const cap = new THREE.Mesh(this.pylonCapGeo, this.pylonCapMat);
-    cap.position.y = 9.1;
-    g.add(body, cap);
+    const M = this.mat, G = this.geo;
+
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(G.post, M.structure);
+      post.position.set(side * 5.15, 3.9, 0);
+      g.add(post);
+
+      const strip = new THREE.Mesh(G.postStrip, M.postStrip);
+      strip.position.set(side * 4.9, 3.6, 0);
+      g.add(strip);
+    }
+
+    const beam = new THREE.Mesh(G.beam, M.structure);
+    beam.position.set(0, 7.6, 0);
+    g.add(beam);
+
+    const glow = new THREE.Mesh(G.beamGlow, M.beamGlow);
+    glow.position.set(0, 7.32, 0);
+    g.add(glow);
+
+    return g;
+  }
+
+  /** A distant tower with lit windows. */
+  _makeCityBlock() {
+    const g = new THREE.Group();
+    const w = rand(3.2, 7.5);
+    const h = rand(9, 34);
+    const d = rand(3.2, 7.5);
+
+    const body = new THREE.Mesh(this.geo.city, pick(this.cityMats));
+    body.scale.set(w, h, d);
+    body.position.y = h / 2;
+    g.add(body);
+
+    if (Math.random() < 0.45) {
+      const cap = new THREE.Mesh(this.geo.cityCap, this.mat.cityCap);
+      cap.scale.set(w * 1.02, 1, d * 1.02);
+      cap.position.y = h + 0.06;
+      g.add(cap);
+    }
+    g.userData.height = h;
     return g;
   }
 
@@ -175,7 +286,11 @@ export class World {
     for (const o of this.obstacles) { o.visible = false; this.scene.remove(o); this.pool[o.userData.kind].release(o); }
     for (const c of this.coins) { c.visible = false; this.scene.remove(c); this.pool.coin.release(c); }
     for (const p of this.powerups) { p.visible = false; this.scene.remove(p); this._powerPool(p.userData.type).release(p); }
-    for (const s of this.scenery) { s.visible = false; this.scene.remove(s); this.pool.scenery.release(s); }
+    for (const s of this.scenery) {
+      s.visible = false;
+      this.scene.remove(s);
+      this.pool[s.userData.poolKey || 'city'].release(s);
+    }
     this.obstacles.length = 0;
     this.coins.length = 0;
     this.powerups.length = 0;
@@ -183,7 +298,8 @@ export class World {
 
     this.roadTex.offset.y = 0;
     this.sinceRow = 0;
-    this.sinceScenery = 0;
+    this.sinceArch = 0;
+    this.sinceCity = 0;
     this.sincePowerup = 999;
     this.rowGap = CFG.rowGapMin;
     this.lastPattern = '';
@@ -317,15 +433,30 @@ export class World {
     this.powerups.push(p);
   }
 
-  spawnScenery() {
+  spawnScenery(kind) {
     const z = SPAWN_Z;
-    for (const side of [-1, 1]) {
-      const s = this.pool.scenery.get();
-      s.visible = true;
-      s.position.set(side * rand(6.4, 8.6), 0, z + rand(-2, 2));
-      s.rotation.y = rand(-0.2, 0.2);
-      this.scene.add(s);
-      this.scenery.push(s);
+
+    if (kind === 'arch') {
+      const a = this.pool.arch.get();
+      a.visible = true;
+      a.position.set(0, 0, z);
+      a.userData.poolKey = 'arch';
+      this.scene.add(a);
+      this.scenery.push(a);
+      return;
+    }
+
+    // a small cluster of towers, offset so the skyline never looks tiled
+    const n = randInt(1, 3);
+    for (let i = 0; i < n; i++) {
+      const c = this.pool.city.get();
+      c.visible = true;
+      const side = Math.random() < 0.5 ? -1 : 1;
+      c.position.set(side * rand(11, 42), 0, z + rand(-18, 18));
+      c.rotation.y = rand(0, Math.PI);
+      c.userData.poolKey = 'city';
+      this.scene.add(c);
+      this.scenery.push(c);
     }
   }
 
@@ -374,10 +505,16 @@ export class World {
       this.spawnRow(ctx.difficulty);
     }
 
-    this.sinceScenery += advance;
-    if (this.sinceScenery >= CFG.sceneryGap) {
-      this.sinceScenery -= CFG.sceneryGap;
-      this.spawnScenery();
+    this.sinceArch += advance;
+    if (this.sinceArch >= CFG.archGap) {
+      this.sinceArch -= CFG.archGap;
+      this.spawnScenery('arch');
+    }
+
+    this.sinceCity += advance;
+    if (this.sinceCity >= CFG.cityGap) {
+      this.sinceCity -= CFG.cityGap;
+      this.spawnScenery('city');
     }
 
     this.sincePowerup += advance;
@@ -514,7 +651,7 @@ export class World {
         s.visible = false;
         this.scene.remove(s);
         this.scenery.splice(i, 1);
-        this.pool.scenery.release(s);
+        this.pool[s.userData.poolKey || 'city'].release(s);
       }
     }
   }

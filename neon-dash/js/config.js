@@ -10,8 +10,7 @@ export const CFG = {
   /* ---------------------------------------------------------------- lanes */
   lanes: LANES,
   laneHalfWidth: 1.28,     // half-width of a lane corridor, used for collision
-  laneLerp: 16,            // exponential smoothing rate for lane changes
-  laneTilt: 0.38,          // max roll (radians) while switching lanes
+  laneTilt: 0.34,          // max roll (radians) while switching lanes
 
   /* ---------------------------------------------------------------- speed */
   speedStart: 16,
@@ -19,9 +18,17 @@ export const CFG = {
   speedRamp: 0.0105,       // speed gained per metre travelled, capped at speedMax
 
   /* --------------------------------------------------------------- player */
-  jumpVelocity: 15.8,
-  gravity: -58,
-  fastFallMul: 2.4,        // extra gravity when pressing down mid-air
+  jumpVelocity: 15.0,
+  // Asymmetric gravity: float a little on the way up, fall hard on the way
+  // down. Same apex, noticeably snappier arc — this is most of "feel".
+  gravityUp: -54,
+  gravityDown: -74,
+  fastFallMul: 2.2,        // extra gravity when pressing down mid-air
+  // Input forgiveness: a jump pressed just before landing still fires, and one
+  // pressed just after walking off a ledge still counts.
+  jumpBufferTime: 0.12,
+  coyoteTime: 0.09,
+  laneSwitchTime: 0.13,    // snappy eased lane change
   slideDuration: 0.62,
   standHeight: 1.9,        // collision height, standing
   slideHeight: 0.85,       // collision height, sliding
@@ -39,15 +46,16 @@ export const CFG = {
   minRowGapTime: 0.80,     // seconds between rows
   rowGapMin: 14,           // metres, floor for very slow speeds
   rowGapMax: 40,           // metres, ceiling so the start is not sparse
-  sceneryGap: 11,          // spacing of decorative side pillars
+  archGap: 36,             // spacing of the neon gantries that span the track
+  cityGap: 15,             // spacing of distant tower clusters
 
   /* ---------------------------------------------------------------- camera */
   camOffsetX: 0,
-  camOffsetY: 3.62,
-  camOffsetZ: 7.5,
-  camLerp: 7.2,
-  camLookZ: -13,
-  camLookY: 1.45,
+  camOffsetY: 2.8,
+  camOffsetZ: 5.9,
+  camLerp: 6.0,
+  camLookZ: -12,
+  camLookY: 1.05,
   camShakeDecay: 3.4,
 
   /* ------------------------------------------------------------- power-ups */

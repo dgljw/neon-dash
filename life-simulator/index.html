@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="人生模拟器 - 从出生到终老，体验一场随机又精彩的人生。" />
+  <title>人生模拟器 · Life Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <div class="logo">
+        <h1>人生模拟器</h1>
+      </div>
+      <div class="header-sub">Life Simulator</div>
+    </header>
+
+    <!-- 开始界面 -->
+    <section id="screen-start" class="screen active">
+      <div class="card start-card">
+        <h2 class="start-title">开始一段人生</h2>
+        <p class="start-desc">从出生到终老，每一步选择都会改变你的故事。</p>
+
+        <div class="field">
+          <label class="field-label" for="inp-name">姓名</label>
+          <input id="inp-name" class="input" type="text" maxlength="12" placeholder="留空则随机生成" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label class="field-label">性别</label>
+          <div class="seg" id="seg-gender">
+            <button class="seg-btn" data-value="male">男</button>
+            <button class="seg-btn" data-value="female">女</button>
+            <button class="seg-btn" data-value="random">随机</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">初始家庭背景</label>
+          <div class="seg wide" id="seg-family">
+            <button class="seg-btn" data-value="poor">贫寒</button>
+            <button class="seg-btn" data-value="normal">普通</button>
+            <button class="seg-btn" data-value="rich">富裕</button>
+            <button class="seg-btn" data-value="random">随机</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">天赋点 <span id="pts-info" class="badge-big">0</span></label>
+          <div class="stat-alloc">
+            <div class="alloc-row" data-stat="iq">
+              <span class="alloc-name">智力</span>
+              <button class="alloc-btn minus" data-stat="iq">−</button>
+              <span class="alloc-val" id="alloc-iq">3</span>
+              <button class="alloc-btn plus" data-stat="iq">＋</button>
+            </div>
+            <div class="alloc-row" data-stat="eq">
+              <span class="alloc-name">情商</span>
+              <button class="alloc-btn minus" data-stat="eq">−</button>
+              <span class="alloc-val" id="alloc-eq">3</span>
+              <button class="alloc-btn plus" data-stat="eq">＋</button>
+            </div>
+            <div class="alloc-row" data-stat="health">
+              <span class="alloc-name">体质</span>
+              <button class="alloc-btn minus" data-stat="health">−</button>
+              <span class="alloc-val" id="alloc-health">3</span>
+              <button class="alloc-btn plus" data-stat="health">＋</button>
+            </div>
+            <div class="alloc-row" data-stat="looks">
+              <span class="alloc-name">颜值</span>
+              <button class="alloc-btn minus" data-stat="looks">−</button>
+              <span class="alloc-val" id="alloc-looks">3</span>
+              <button class="alloc-btn plus" data-stat="looks">＋</button>
+            </div>
+          </div>
+          <p class="hint">共 <span id="pts-total">12</span> 点，每项最低 1，最高 10</p>
+        </div>
+
+        <button id="btn-start" class="btn btn-primary btn-big">开始人生 ▶</button>
+      </div>
+    </section>
+
+    <!-- 人生主界面 -->
+    <section id="screen-life" class="screen">
+      <div class="life-topbar">
+        <button id="btn-restart" class="btn btn-ghost" title="重新开始">↺ 重开</button>
+        <div class="progress-wrap">
+          <div class="age-label">第 <span id="age-num">0</span> 岁</div>
+          <div class="progress"><div id="life-progress" class="progress-fill"></div></div>
+        </div>
+        <div class="year-counter">💰 <span id="wealth-token">0</span></div>
+      </div>
+
+      <div id="life-main" class="life-main"></div>
+    </section>
+
+    <!-- 结局界面 -->
+    <section id="screen-end" class="screen">
+      <div class="card end-card">
+        <div class="end-head">
+          <h2 class="end-title">人生落幕</h2>
+          <div class="end-age">享年 <span id="end-age">0</span> 岁</div>
+        </div>
+        <div id="end-report" class="end-report"></div>
+        <div class="end-actions">
+          <button id="btn-again" class="btn btn-primary">再来一世</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 事件弹窗 -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-emoji" id="modal-emoji"></div>
+      <div class="modal-title" id="modal-title"></div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-choices" id="modal-choices"></div>
+      <button id="modal-btn" class="btn btn-primary" hidden>继续</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

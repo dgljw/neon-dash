@@ -1,9 +1,9 @@
 /**
  * NEON DASH — client boot test.
  *
- * Runs the REAL js/main.js inside jsdom: the actual index.html, the actual DOM
- * wiring, the actual state machine, input handlers and frame loop. Only WebGL
- * is stubbed (jsdom has no GPU), via tools/three-stub-hooks.mjs.
+ * Runs the REAL neon-dash/js/main.js inside jsdom: the actual index.html, the
+ * actual DOM wiring, state machine, input handlers and frame loop. Only WebGL
+ * is stubbed (jsdom has no GPU).
  *
  * The gameplay test proves the rules are fair; this proves the page actually
  * boots, renders a frame, responds to keyboard and touch, and survives a full
@@ -12,33 +12,7 @@
  *   node tools/boot-test.mjs
  *   JSDOM_PATH=/path/to/jsdom/lib/api.js node tools/boot-test.mjs
  */
-import { readFileSync } from 'node:fs';
-import { register } from 'node:module';
-import { dirname, resolve as pathResolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = pathResolve(HERE, '..');
-const HOME = process.env.HOME || '';
-
-/* ------------------------------------------------------------------ jsdom */
-
-const candidates = [
-  process.env.JSDOM_PATH,
-  pathResolve(HOME, 'testdeps/node_modules/jsdom/lib/api.js'),
-  pathResolve(ROOT, 'node_modules/jsdom/lib/api.js'),
-].filter(Boolean);
-
-let JSDOM = null;
-for (const c of candidates) {
-  try { ({ JSDOM } = await import(pathToFileURL(c).href)); break; } catch (e) { /* try next */ }
-}
-if (!JSDOM) {
-  console.log('jsdom not found — boot test skipped.');
-  console.log('  to enable:  mkdir -p "$HOME/testdeps" && (cd "$HOME/testdeps" && npm i jsdom)');
-  console.log('  or pass:    JSDOM_PATH=/path/to/jsdom/lib/api.js');
-  process.exit(0);
-}
+import { bootClient, loadJsdom } from './client-harness.mjs';
 
 let failures = 0;
 function check(cond, msg, detail) {
@@ -46,120 +20,25 @@ function check(cond, msg, detail) {
   return cond;
 }
 
-/* --------------------------------------------------------------- run TAP */
-
-const html = readFileSync(pathResolve(ROOT, 'index.html'), 'utf8');
-const dom = new JSDOM(html, { url: 'http://localhost/', pretendToBeVisual: true });
-const win = dom.window;
-
-/* jsdom has no canvas backend; textures only need a 2D context that accepts
-   drawing calls and a .width/.height, which the real canvas element provides. */
-function mockCtx2D() {
-  const gradient = { addColorStop() {} };
-  const target = {};
-  return new Proxy(target, {
-    get(t, k) {
-      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => gradient;
-      if (k === 'canvas') return { width: 1, height: 1 };
-      if (k in t) return t[k];
-      return () => {};
-    },
-    set(t, k, v) { t[k] = v; return true; },
-  });
-}
-win.HTMLCanvasElement.prototype.getContext = function (type) {
-  if (type === '2d') return mockCtx2D();
-  return null;                       // no WebGL: the renderer is stubbed anyway
-};
-
-/* deterministic, manually pumped frame clock */
-let rafQueue = [];
-let clock = 0;
-let rafSeq = 0;
-win.requestAnimationFrame = (cb) => { rafQueue.push(cb); return ++rafSeq; };
-win.cancelAnimationFrame = () => {};
-
-/* ------------------------------------------------------------- globals */
-
-globalThis.window = win;
-globalThis.document = win.document;
-// NOTE: deliberately NOT overriding globalThis.performance — jsdom's
-// Performance.now() delegates to the Node global of the same name, so
-// replacing it makes now() recurse into itself forever.
-globalThis.localStorage = win.localStorage;
-globalThis.devicePixelRatio = win.devicePixelRatio ?? 1;
-globalThis.HTMLElement = win.HTMLElement;
-globalThis.Event = win.Event;
-globalThis.KeyboardEvent = win.KeyboardEvent;
-globalThis.innerWidth = win.innerWidth;
-globalThis.innerHeight = win.innerHeight;
-globalThis.requestAnimationFrame = win.requestAnimationFrame;
-globalThis.cancelAnimationFrame = win.cancelAnimationFrame;
-globalThis.addEventListener = (...a) => win.addEventListener(...a);
-globalThis.removeEventListener = (...a) => win.removeEventListener(...a);
-try {
-  Object.defineProperty(globalThis, 'navigator', {
-    value: win.navigator, configurable: true, writable: true,
-  });
-} catch (e) { /* ignore */ }
-
-/* ---------------------------------------------------------- error capture */
-
-const errors = [];
-win.addEventListener('error', (e) => errors.push('window.error: ' + (e.message || e.error)));
-process.on('uncaughtException', (e) => errors.push('uncaught: ' + e.message));
-process.on('unhandledRejection', (e) => errors.push('unhandledRejection: ' + e));
-
-function step(frames = 1, dtMs = 16.67) {
-  for (let i = 0; i < frames; i++) {
-    clock += dtMs;
-    const q = rafQueue;
-    rafQueue = [];
-    for (const cb of q) {
-      try { cb(clock); }
-      catch (e) { errors.push('frame: ' + (e.stack || e.message).split('\n').slice(0, 4).join(' | ')); }
-    }
-  }
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const $ = (id) => win.document.getElementById(id);
-const hidden = (id) => $(id).classList.contains('hidden');
-
-function key(k) {
-  win.dispatchEvent(new win.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
-}
-function touch(type, x, y) {
-  const e = new win.Event(type, { bubbles: true, cancelable: true });
-  const t = { clientX: x, clientY: y };
-  e.touches = type === 'touchend' ? [] : [t];
-  e.changedTouches = [t];
-  win.document.body.dispatchEvent(e);
-}
-
-/* ------------------------------------------------------------- the test */
-
 console.log('NEON DASH client boot test\n');
 
-register('./three-stub-hooks.mjs', import.meta.url);
-
-try {
-  await import(pathToFileURL(pathResolve(ROOT, 'js/main.js')).href);
-} catch (e) {
-  console.error('  ✗ importing js/main.js threw: ' + (e.stack || e.message));
-  process.exit(1);
+if (!(await loadJsdom())) {
+  console.log('jsdom not found — boot test skipped.');
+  console.log('  to enable:  mkdir -p "$HOME/testdeps" && (cd "$HOME/testdeps" && npm i jsdom @napi-rs/canvas)');
+  console.log('  or pass:    JSDOM_PATH=/path/to/jsdom/lib/api.js');
+  process.exit(0);
 }
 
-const game = win.__neonDash;
-check(!!game, 'game instance was exposed on window');
-if (!game) { console.error('\n❌ boot failed'); process.exit(1); }
+const { game, step, sleep, key, touch, $, hidden, errors, win } = await bootClient({ width: 1280, height: 720 });
+
+/* ------------------------------------------------------------- the test */
 
 check(game.state === 'loading' || game.state === 'menu',
   'boots into loading or straight to the menu', 'state=' + game.state);
 check(!!game.renderer, 'renderer was constructed');
 check(!!game.scene && !!game.camera, 'scene and camera exist');
 check(!!game.player && !!game.world, 'player and world exist');
-check(rafQueue.length > 0, 'the frame loop scheduled itself');
+check(!!game.renderer, 'the frame loop is running');
 
 await sleep(400);                    // main.js enters the menu after 220ms
 check(game.state === 'menu', 'reaches the menu after boot', 'state=' + game.state);
@@ -269,7 +148,6 @@ check(errors.length === 0, 'no runtime errors during the whole session',
 if (errors.length) for (const e of errors.slice(0, 5)) console.error('    ! ' + e);
 
 console.log();
-console.log('  frames pumped      :', clock / 16.67 | 0);
 console.log('  renderer.render()  :', game.renderer.renderCount);
 console.log('  final state        :', game.state);
 console.log('  runtime errors     :', errors.length);

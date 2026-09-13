@@ -10,7 +10,7 @@
   --green: #4dffa1;
   --danger: #ff3b5c;
   --bg: #07030f;
-  --panel: rgba(16, 8, 34, 0.72);
+  --panel: rgba(12, 6, 26, 0.86);
   --line: rgba(139, 92, 255, 0.35);
   --text: #e9e2ff;
   --muted: #9d8fc4;
@@ -88,9 +88,9 @@ html, body {
   justify-content: center;
   padding: 20px;
   background:
-    radial-gradient(ellipse 70% 55% at 50% 105%, rgba(255, 47, 208, 0.22), transparent 70%),
-    radial-gradient(ellipse 60% 50% at 50% -10%, rgba(39, 244, 255, 0.16), transparent 70%),
-    rgba(7, 3, 15, 0.82);
+    radial-gradient(ellipse 70% 55% at 50% 105%, rgba(255, 47, 208, 0.18), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 50% -10%, rgba(39, 244, 255, 0.14), transparent 70%),
+    rgba(7, 3, 15, 0.62);
   -webkit-backdrop-filter: blur(7px);
   backdrop-filter: blur(7px);
   overflow-y: auto;
@@ -106,19 +106,32 @@ html, body {
   width: min(680px, 100%);
   padding: 30px 26px 26px;
   border-radius: 22px;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(139, 92, 255, 0.34);
   background: var(--panel);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.04) inset,
-    0 0 42px rgba(139, 92, 255, 0.28),
-    0 0 110px rgba(255, 47, 208, 0.14);
+    0 18px 54px rgba(0, 0, 0, 0.55),
+    0 0 42px rgba(139, 92, 255, 0.22);
   text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* accent hairline, matching the portal cards */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--magenta), transparent);
+  opacity: 0.9;
+  pointer-events: none;
 }
 
 .panel.narrow { width: min(440px, 100%); }
 
 .title {
-  font-size: clamp(40px, 13vw, 78px);
+  font-size: clamp(38px, 12vw, 72px);
   line-height: 0.94;
   letter-spacing: 0.06em;
   font-weight: 900;
@@ -173,8 +186,8 @@ html, body {
   display: block;
   width: 100%;
   margin: 10px 0 0;
-  padding: 15px 20px;
-  border-radius: 14px;
+  padding: 16px 20px;
+  border-radius: 13px;
   border: 1px solid transparent;
   font-family: inherit;
   font-size: 17px;
@@ -187,9 +200,10 @@ html, body {
 .btn:active { transform: scale(0.975); }
 
 .btn.primary {
-  color: #08030f;
-  background: linear-gradient(100deg, var(--cyan), #7ce8ff 40%, var(--magenta));
-  box-shadow: 0 0 22px rgba(39, 244, 255, 0.45), 0 0 60px rgba(255, 47, 208, 0.3);
+  color: #07030f;
+  background: linear-gradient(100deg, var(--cyan), #7ce8ff 42%, var(--magenta));
+  box-shadow: 0 0 22px rgba(39, 244, 255, 0.4), 0 0 62px rgba(255, 47, 208, 0.26);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .btn.primary:hover { box-shadow: 0 0 30px rgba(39, 244, 255, 0.7), 0 0 80px rgba(255, 47, 208, 0.45); }
@@ -302,9 +316,10 @@ kbd {
 .stat-label {
   font-size: 9.5px;
   letter-spacing: 0.2em;
-  color: var(--muted);
+  color: #b6a9dd;
   text-transform: uppercase;
   white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 
 .stat-value {
@@ -376,8 +391,9 @@ kbd {
 .speedo-text {
   font-size: 10.5px;
   letter-spacing: 0.16em;
-  color: var(--muted);
+  color: #b6a9dd;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
 }
 
 .speedo-text b { color: var(--cyan); font-size: 13px; }

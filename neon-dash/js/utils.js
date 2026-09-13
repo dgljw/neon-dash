@@ -2,7 +2,7 @@
  * NEON DASH — maths helpers and procedurally generated canvas textures.
  * There are no external assets: every texture in the game is drawn at runtime.
  */
-import * as THREE from '../vendor/three.module.min.js';
+import * as THREE from '../../vendor/three.module.min.js';
 
 /* ------------------------------------------------------------------ maths */
 
@@ -181,6 +181,80 @@ export function makeTrailTexture() {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+/** White vertical fade (opaque at the bottom, transparent at the top).
+ *  Tinted per use for road-edge light walls and similar gradients. */
+export function makeVerticalFadeTexture() {
+  const W = 8, H = 128;
+  const [c, g] = canvas2d(W, H);
+  const grad = g.createLinearGradient(0, H, 0, 0);
+  grad.addColorStop(0.0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1.0, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Distant tower skin: dark facade with scattered lit windows. */
+export function makeBuildingTexture() {
+  const W = 128, H = 256;
+  const [c, g] = canvas2d(W, H);
+
+  g.fillStyle = '#0a0618';
+  g.fillRect(0, 0, W, H);
+
+  // faint floor separation
+  g.strokeStyle = 'rgba(80,50,140,0.20)';
+  g.lineWidth = 1;
+  for (let y = 0; y < H; y += 10) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+  }
+
+  const warm = ['#ffd447', '#ffb347', '#ffe9a8'];
+  const cool = ['#27f4ff', '#8b5cff', '#63e6ff'];
+  for (let y = 6; y < H - 6; y += 10) {
+    for (let x = 5; x < W - 5; x += 9) {
+      const r = Math.random();
+      if (r > 0.62) continue;                       // most windows are dark
+      const lit = r < 0.30;
+      if (!lit) {
+        g.fillStyle = 'rgba(40,24,80,0.55)';
+      } else {
+        g.fillStyle = Math.random() < 0.7
+          ? warm[(Math.random() * warm.length) | 0]
+          : cool[(Math.random() * cool.length) | 0];
+        g.shadowBlur = 6;
+        g.shadowColor = g.fillStyle;
+      }
+      g.fillRect(x, y, 4, 5);
+      g.shadowBlur = 0;
+    }
+  }
+
+  return finish(c);
+}
+
+/** Dim grid for the ground plane that extends past the track. */
+export function makeGroundGridTexture() {
+  const S = 256;
+  const [c, g] = canvas2d(S, S);
+  g.fillStyle = '#06030f';
+  g.fillRect(0, 0, S, S);
+
+  g.shadowBlur = 8;
+  g.shadowColor = '#8b5cff';
+  g.strokeStyle = 'rgba(139,92,255,0.30)';
+  g.lineWidth = 1.5;
+  for (let i = 0; i <= 4; i++) {
+    const p = (S / 4) * i;
+    g.beginPath(); g.moveTo(p, 0); g.lineTo(p, S); g.stroke();
+    g.beginPath(); g.moveTo(0, p); g.lineTo(S, p); g.stroke();
+  }
+  return finish(c);
 }
 
 /** Tiny bright core with a cool halo — used for the starfield. */

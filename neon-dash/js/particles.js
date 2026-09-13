@@ -3,7 +3,7 @@
  * One draw call for the whole system; particles are simulated on the CPU
  * (a few hundred at a time is comfortably cheap) and uploaded as attributes.
  */
-import * as THREE from '../vendor/three.module.min.js';
+import * as THREE from '../../vendor/three.module.min.js';
 
 const VERT = `
 attribute vec3 aColor;

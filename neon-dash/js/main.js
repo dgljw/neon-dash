@@ -2,7 +2,7 @@
  * NEON DASH — game controller.
  * Owns the renderer/scene, the run state machine, scoring and the frame loop.
  */
-import * as THREE from '../vendor/three.module.min.js';
+import * as THREE from '../../vendor/three.module.min.js';
 import { CFG, COLOR, POWERUPS } from './config.js';
 import { clamp, damp } from './utils.js';
 import { World } from './world.js';
@@ -31,6 +31,7 @@ class Game {
     this.comboTimer = 0;
     this.speed = CFG.speedStart;
     this.shake = 0;
+    this.hitStop = 0;
     this.elapsed = 0;
     this.powers = { magnet: 0, shield: false, boost: 0 };
 
@@ -261,6 +262,7 @@ class Game {
     this.speed = CFG.speedStart;
     this.elapsed = 0;
     this.shake = 0;
+    this.hitStop = 0;
     this.powers.magnet = 0;
     this.powers.boost = 0;
     this.powers.shield = false;
@@ -370,6 +372,7 @@ class Game {
     this.score += CFG.coinScore * this.combo;
 
     this.audio.coin(Math.min(this.streak, 12));
+    this.shake = Math.max(this.shake, 0.05);
     if (this.combo >= 2) this.ui.showCombo(this.combo);
 
     this.particles.burst(x, y, z, {
@@ -399,6 +402,7 @@ class Game {
       this.audio.shieldBreak();
       this.ui.flash('#4dffa1', 0.32);
       this.shake = Math.max(this.shake, 0.34);
+      this.hitStop = Math.max(this.hitStop, 0.06);
       return;
     }
 
@@ -410,6 +414,7 @@ class Game {
     this.audio.powerup();
     this.ui.flash(def.css, 0.3);
     this.score += 40;
+    this.hitStop = Math.max(this.hitStop, 0.05);
 
     this.particles.burst(x, y, z, {
       count: 34, color: def.color, speed: 9, size: 0.48,
@@ -445,6 +450,7 @@ class Game {
 
     this.ui.flash('#ff3b5c', 0.6);
     this.shake = 0.95;
+    this.hitStop = 0.09;
 
     this.player.explode();
     this.particles.burst(x, y + 0.8, z, {
@@ -541,6 +547,8 @@ class Game {
     if (!this._look) this._look = new THREE.Vector3();
     this._look.set(p.x * 0.45, CFG.camLookY + p.y * 0.32, CFG.camLookZ);
     this.camera.lookAt(this._look);
+    // bank into the turn — must come after lookAt, which overwrites rotation
+    this.camera.rotateZ(p.tilt * 0.34);
 
     const targetFov = 62 + (boosting ? 9 : 0) + clamp((this.speed - 28) / 70, 0, 1) * 5;
     if (Math.abs(this.camera.fov - targetFov) > 0.06) {
@@ -567,6 +575,13 @@ class Game {
     this._last = now;
     if (!isFinite(dt) || dt <= 0) dt = 1 / 60;
     dt = Math.min(dt, CFG.maxDelta);
+
+    // Hit-stop: a brief near-freeze on impacts and pickups. This is the single
+    // cheapest trick for making collisions feel like they landed.
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      dt *= 0.06;
+    }
 
     // adaptive resolution: drop to 1x if we are consistently slow
     this._frameTimes.push(dt);

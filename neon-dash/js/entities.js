@@ -10,7 +10,7 @@
  * when |player.x - lane.x| < laneHalfWidth, so sub-lane jitter can never cause
  * an unfair hit.
  */
-import * as THREE from '../vendor/three.module.min.js';
+import * as THREE from '../../vendor/three.module.min.js';
 import { COLOR, CFG, LANES, POWERUPS } from './config.js';
 import { makeGlowTexture } from './utils.js';
 
@@ -22,7 +22,7 @@ export const OBSTACLE = {
   // slide under it
   high: { halfDepth: 0.42, yBottom: 1.35, yTop: 2.6, color: COLOR.gold },
   // full-height pillar: change lane
-  pillar: { halfDepth: 0.46, yBottom: 0.0, yTop: 4.4, color: COLOR.magenta },
+  pillar: { halfDepth: 0.4, yBottom: 0.0, yTop: 3.9, color: COLOR.magenta },
 };
 
 /* --------------------------------------------------------------------- assets */
@@ -51,7 +51,13 @@ export class Assets {
     G.highBeam = new THREE.BoxGeometry(2.05, 1.25, 0.42);
     G.highLip = new THREE.BoxGeometry(2.12, 0.14, 0.5);
 
-    G.pillarBody = new THREE.BoxGeometry(1.8, 4.4, 0.82);
+    G.chevron = new THREE.BoxGeometry(0.3, 0.62, 0.13);
+    G.pillarBody = new THREE.BoxGeometry(1.5, 3.9, 0.72);
+    G.pillarStrip = new THREE.BoxGeometry(0.09, 3.7, 0.09);
+    G.pillarCap = new THREE.BoxGeometry(1.62, 0.16, 0.84);
+    G.lowGlow = new THREE.PlaneGeometry(4.6, 3.0);
+    G.highGlow = new THREE.PlaneGeometry(4.6, 3.4);
+    G.pillarGlow = new THREE.PlaneGeometry(3.6, 6.4);
     G.pillarCore = new THREE.OctahedronGeometry(0.42, 0);
 
     G.coin = new THREE.TorusGeometry(0.34, 0.105, 8, 22);
@@ -78,6 +84,21 @@ export class Assets {
     M.lowLip = new THREE.MeshBasicMaterial({ color: COLOR.cyan });
     M.highLip = new THREE.MeshBasicMaterial({ color: COLOR.gold });
     M.pillarCore = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
+    M.pillarStrip = new THREE.MeshBasicMaterial({ color: COLOR.magenta });
+    M.pillarCap = new THREE.MeshBasicMaterial({ color: 0xffd0f4 });
+
+    const glowMat = (color, opacity) => new THREE.MeshBasicMaterial({
+      map: this._glowTex(color),
+      color,
+      transparent: true,
+      opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    M.lowGlow = glowMat(COLOR.cyan, 0.42);
+    M.highGlow = glowMat(COLOR.gold, 0.42);
+    M.pillarGlow = glowMat(COLOR.magenta, 0.5);
 
     M.edgeCyan = new THREE.LineBasicMaterial({ color: COLOR.cyan, transparent: true, opacity: 0.9 });
     M.edgeGold = new THREE.LineBasicMaterial({ color: COLOR.gold, transparent: true, opacity: 0.9 });
@@ -112,10 +133,10 @@ export class Assets {
   /* ------------------------------------------------------------------ builds */
 
   obstacle(kind) {
-    const spec = OBSTACLE[kind];
     const g = new THREE.Group();
 
     if (kind === 'low') {
+      // a wide low barrier with a bright top rail and upward chevrons
       const body = new THREE.Mesh(this.geo.lowBody, this.mat.lowBody);
       body.position.y = 0.575;
       const lip = new THREE.Mesh(this.geo.lowLip, this.mat.lowLip);
@@ -123,15 +144,21 @@ export class Assets {
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geo.lowBody), this.mat.edgeCyan);
       edges.position.y = 0.575;
       g.add(body, lip, edges);
-      // sideways chevrons so it reads as "go over"
-      for (const sx of [-0.55, 0.55]) {
-        const bar = new THREE.Mesh(this.geo.lowLip, this.mat.lowLip);
-        bar.scale.set(0.36, 0.7, 0.9);
-        bar.position.set(sx, 0.62, 0.23);
-        bar.rotation.z = sx > 0 ? -0.7 : 0.7;
+
+      for (const sx of [-0.62, 0, 0.62]) {
+        const bar = new THREE.Mesh(this.geo.chevron, this.mat.lowLip);
+        bar.position.set(sx, 0.48, 0.24);
+        bar.rotation.z = sx === 0 ? 0 : (sx > 0 ? -0.85 : 0.85);
         g.add(bar);
       }
+
+      const glow = new THREE.Mesh(this.geo.lowGlow, this.mat.lowGlow);
+      glow.position.set(0, 0.8, -0.34);
+      glow.renderOrder = 1;
+      g.add(glow);
+
     } else if (kind === 'high') {
+      // an overhead gate with a bright underside and downward chevrons
       const beam = new THREE.Mesh(this.geo.highBeam, this.mat.highBody);
       beam.position.y = 1.975;
       const lip = new THREE.Mesh(this.geo.highLip, this.mat.highLip);
@@ -139,28 +166,48 @@ export class Assets {
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geo.highBeam), this.mat.edgeGold);
       edges.position.y = 1.975;
       g.add(beam, lip, edges);
-      // downward chevrons: "go under"
-      for (const sx of [-0.55, 0.55]) {
-        const bar = new THREE.Mesh(this.geo.highLip, this.mat.highLip);
-        bar.scale.set(0.36, 0.7, 0.9);
-        bar.position.set(sx, 1.3, 0.23);
-        bar.rotation.z = sx > 0 ? 0.7 : -0.7;
+
+      for (const sx of [-0.62, 0, 0.62]) {
+        const bar = new THREE.Mesh(this.geo.chevron, this.mat.highLip);
+        bar.position.set(sx, 1.62, 0.24);
+        bar.rotation.z = sx === 0 ? 0 : (sx > 0 ? 0.85 : -0.85);
         g.add(bar);
       }
+
+      const glow = new THREE.Mesh(this.geo.highGlow, this.mat.highGlow);
+      glow.position.set(0, 1.9, -0.34);
+      glow.renderOrder = 1;
+      g.add(glow);
+
     } else {
+      // a slim pillar with corner strips and a spinning core
       const body = new THREE.Mesh(this.geo.pillarBody, this.mat.pillarBody);
-      body.position.y = 2.2;
+      body.position.y = 1.95;
+      const cap = new THREE.Mesh(this.geo.pillarCap, this.mat.pillarCap);
+      cap.position.y = 3.95;
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(this.geo.pillarBody), this.mat.edgeMagenta);
-      edges.position.y = 2.2;
+      edges.position.y = 1.95;
+      g.add(body, cap, edges);
+
+      for (const sx of [-0.7, 0.7]) {
+        const strip = new THREE.Mesh(this.geo.pillarStrip, this.mat.pillarStrip);
+        strip.position.set(sx, 1.95, 0.37);
+        g.add(strip);
+      }
+
       const core = new THREE.Mesh(this.geo.pillarCore, this.mat.pillarCore);
       core.name = 'core';
-      core.position.y = 2.2;
-      g.add(body, edges, core);
+      core.position.y = 2.3;
+      g.add(core);
+
+      const glow = new THREE.Mesh(this.geo.pillarGlow, this.mat.pillarGlow);
+      glow.position.set(0, 2.0, -0.42);
+      glow.renderOrder = 1;
+      g.add(glow);
     }
 
     g.userData.kind = kind;
-    g.userData.spec = spec;
-    g.userData.spin = kind === 'pillar';
+    g.userData.spec = OBSTACLE[kind];
     return g;
   }
 
