@@ -75,6 +75,10 @@ npm test
 ```bash
 npm run preview:portal     # 用 resvg 把首页版式渲染成 PNG（复用真实卡片插画与目录）
 npm run preview:game       # 用光线投射把 NEON DASH 的真实场景图渲染成 PNG
+
+# 单独端详玩家机车的某个角度（改模型时全靠它）
+node tools/preview-render.mjs --scene bike --view three --width 500
+#   --view back | side | three | front | top
 ```
 
 `tools/preview-render.mjs` 会在 jsdom 里启动真实的客户端，然后用 `Raycaster`
@@ -94,7 +98,9 @@ neon-dash/                 NEON DASH
   index.html
   css/style.css
   js/config.js             全部手感数值集中在此
-  js/utils.js              数学工具 + 程序化 Canvas 贴图
+  js/utils.js              数学工具 + 程序化 Canvas 贴图 + 几何构造器
+                           （放样 loftGeometry / 刀片 bladeGeometry /
+                             管路 tubeGeometry / 合并 mergeGeometries）
   js/audio.js              Web Audio 合成器：音效 + synthwave BGM（无音频文件）
   js/input.js              键盘 + 触屏滑动 + 屏幕按钮
   js/particles.js          GPU 粒子池（单次 draw call，自定义 ShaderMaterial）
@@ -137,7 +143,10 @@ tools/png.mjs              极简 PNG 编码器
   高速下单帧位移可能超过障碍厚度，所以判定用的是「这一帧是否扫过碰撞窗口」。
 - **跳跃容错**：0.12s 输入缓冲 + 0.09s 土狼时间；上升与下降用不同重力，
   同样的最高点但手感更利落。
-- **零素材**：所有贴图 Canvas 运行时生成，所有音效与 BGM 用 Web Audio 合成。
+- **零素材**：所有贴图 Canvas 运行时生成，所有音效与 BGM 用 Web Audio 合成；
+  所有模型也是代码造的——机身/立柱/横梁用截面放样（`loftGeometry`）一次成型，
+  鳍片/箭头用带倒角的挤出（`bladeGeometry`），灯带用沿路径的细管
+  （`tubeGeometry`），楼群用 `mergeGeometries` 合并成单次 draw call。
 - **自适应画质**：连续 90 帧平均帧时间超过 26ms 时自动把 devicePixelRatio 降到 1。
 
 ## 部署
