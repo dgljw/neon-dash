@@ -27,7 +27,9 @@ void main() {
   vec2 d = gl_PointCoord - vec2(0.5);
   float r = dot(d, d);
   if (r > 0.25) discard;
-  float a = smoothstep(0.25, 0.0, r) * vAlpha;
+  // NOTE: glsl smoothstep() is undefined when edge0 >= edge1, so the
+  // arguments must be ascending and the result inverted.
+  float a = (1.0 - smoothstep(0.0, 0.25, r)) * vAlpha;
   if (a <= 0.001) discard;
   gl_FragColor = vec4(vColor, a);
 }

@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "node tools/serve.mjs",
     "start": "node tools/serve.mjs",
-    "test": "node tools/gameplay-test.mjs 300"
+    "test": "npm run test:gameplay && npm run test:boot",
+    "test:gameplay": "node tools/gameplay-test.mjs 120 5",
+    "test:gameplay:long": "node tools/gameplay-test.mjs 400 14",
+    "test:boot": "node tools/boot-test.mjs"
   },
   "keywords": [
     "threejs",
